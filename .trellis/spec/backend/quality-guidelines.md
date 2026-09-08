@@ -19,7 +19,7 @@ cargo test
 ## 2. 测试
 
 - 只用**内联** `#[cfg(test)] mod tests { use super::*; … }`,不建 `tests/` 目录。
-- 测试函数名 snake_case 描述行为:`empty_name_is_rejected`、`greets_trimmed_name`;`expect` 消息用中文说明期望(`greet.rs`)。
+- 测试函数名 snake_case 描述行为:`centers_horizontally_and_anchors_top_at_quarter`(`launcher.rs`)、`invalid_input_message_has_category_prefix`(`error.rs`);`expect` 消息用中文说明期望(`error.rs` 的 `"AppError 应能序列化为字符串"`)。
 - 必测:领域层纯逻辑;`AppError` 每个变体的 `to_string()` 文案(锁定前端契约);输入校验的拒绝路径。
 - 不测:需要 `AppHandle` / `State` / 窗口的命令;把逻辑下沉后测领域层。
 - 异步逻辑用 `#[tokio::test]`,首次引入时在 `[dev-dependencies]` 加 `tokio = { features = ["macros", "rt"] }` 并注释。
@@ -27,7 +27,7 @@ cargo test
 
 ## 3. 注释与文档
 
-- 每个 `.rs` 文件开头 `//!` 模块文档:一句话职责 + 边界(什么不放这里)。`lib.rs`、`commands.rs`、`error.rs`、`greet.rs` 都是样板。
+- 每个 `.rs` 文件开头 `//!` 模块文档:一句话职责 + 边界(什么不放这里)。`lib.rs`、`commands.rs`、`error.rs`、`launcher.rs`、`tray.rs` 都是样板。
 - 每个 `pub` 项 `///` 文档注释:做什么、参数含义、何时返回哪个错误。
 - 行内 `//` 注释解释**隐藏约束**:平台时序、workaround、为什么不能删(`main.rs` 的 `windows_subsystem`、`Cargo.toml` 的 `_lib`)。不写复述代码的注释。
 - 全部中文;标识符英文。
@@ -40,6 +40,7 @@ cargo test
 - serde / thiserror 用全路径写法 `serde::Serialize`、`thiserror::Error`(与 `error.rs` 一致),不单独 `use serde::Serialize;`;建议派生顺序 `Debug, Clone, serde::Serialize, serde::Deserialize`,再接 `#[serde(...)]`。
 - 字符串格式化用内联变量 `format!("你好,{name}")`,不用位置参数。
 - 常量用 `const`,不用 `static`(除非需要地址稳定或内部可变)。
+- `unsafe` 块每处上方一行 `// 安全:…` 中文注释说明为什么前置条件成立(句柄来自哪里、回调签名为何匹配、谁保证生命周期),且块只包住那一次 FFI 调用;样板 `launcher/windows.rs`(三处 `SetWindowSubclass` / `RemoveWindowSubclass` / `DefSubclassProc`)。没有理由可写的 `unsafe` 就不该存在。
 - `Cargo.lock` 提交进仓库;改名 crate 后 `cargo update --workspace --offline` 刷新。
 
 ## 5. 反模式速查

@@ -84,7 +84,7 @@ bun run dev
 ```
 
 > [!TIP]
-> **关于双向降级**：通过 `bun run dev` 启动纯浏览器模式时，页面会调用 `src/lib/runtime.ts` 感知到不在 WebView 中，`src/lib/api.ts` 会自动返回带有 `(浏览器预览)` 标识的模拟数据。这允许前端工程师在没有安装 Rust 环境的设备上快速完成界面开发。
+> **关于双向降级**：通过 `bun run dev` 启动纯浏览器模式时，页面会调用 `src/lib/runtime.ts` 感知到不在 WebView 中：`src/lib/api.ts` 的命令封装降级为 no-op 或默认值（如唤出键回退为默认键位），`src/lib/window.ts` 的尺寸同步与 `useTauriEvent` 的事件订阅直接跳过。这允许前端工程师在没有安装 Rust 环境的设备上快速完成界面开发；窗口显隐、托盘、全局快捷键等原生能力需 `bun run tauri dev` 联调。
 
 ---
 
@@ -157,13 +157,14 @@ git commit -m "chore: initialize project from tauri-vue-starter template"
 │   ├── components/
 │   │   ├── common/             # 通用无业务组件 (KeyboardKey.vue)
 │   │   └── launcher/           # 启动器领域组件：面板壳、搜索栏、结果网格、磁贴、页脚
-│   ├── composables/            # useKeymap / useRowNavigation / useAutoHeight
+│   ├── composables/            # useKeymap / useRowNavigation / useAutoHeight / useTauriEvent（唯一 @tauri-apps/api/event 入口）
 │   ├── stores/                 # Pinia store（快捷键登记表 keymap.ts）
 │   ├── lib/
-│   │   ├── api.ts              # 统一 IPC 调用入口（附带错误处理与降级响应）
+│   │   ├── api.ts              # 统一 IPC 调用入口（hideLauncher / getToggleShortcut；附带浏览器降级）
+│   │   ├── events.ts           # Rust → 前端事件名常量与 payload 类型表（与 launcher.rs 一一对应）
 │   │   ├── runtime.ts          # 运行时环境探测（判断是否处于 Tauri WebView）
-│   │   ├── window.ts           # 窗口控制封装（隐藏 / 改尺寸；唯一 @tauri-apps/api/window 入口）
-│   │   └── launcher/           # 启动器纯函数（搜索分区、方向键导航、键位标签）+ 单测
+│   │   ├── window.ts           # 窗口尺寸同步（只做 setSize；唯一 @tauri-apps/api/window 入口；显示 / 隐藏由 Rust 控制）
+│   │   └── launcher/           # 启动器纯函数（搜索分区、方向键导航、键位标签、快捷键解析）+ 单测
 │   ├── types/                  # 跨模块共享类型（tool.ts：工具注册契约）
 │   ├── tools/                  # 工具模块：registry.ts 登记表、icons.ts 图标映射、demo/ 示例工具
 │   ├── App.vue                 # 根组件（只管全局布局，挂载 LauncherPanel）
@@ -171,13 +172,16 @@ git commit -m "chore: initialize project from tauri-vue-starter template"
 │   ├── main.ts                 # 前端应用挂载入口
 │   └── vite-env.d.ts           # Vite 环境变量与 unplugin-icons 类型声明
 ├── src-tauri/                  # Rust 桌面端源码
-│   ├── capabilities/           # Tauri 2 窗口与插件能力权限配置 (default.json)
+│   ├── capabilities/           # Tauri 2 窗口与插件能力权限配置 (default.json：core:default + allow-set-size)
 │   ├── icons/                  # 多平台应用图标资源
 │   ├── src/
-│   │   ├── commands/           # 按领域模块划分的 Tauri 命令实现 (greet.rs 等)
+│   │   ├── commands/           # 按领域模块划分的 Tauri 命令实现 (launcher.rs：hide_launcher / get_toggle_shortcut)
 │   │   ├── commands.rs         # 命令模块索引
+│   │   ├── launcher.rs         # 启动器窗口领域逻辑：显示 / 隐藏 / 定位 / 失焦策略 / 事件常量 / 默认唤出键
+│   │   ├── launcher/windows.rs # Windows 平台钩子：拦截 Alt 弹出的无边框窗口系统菜单
+│   │   ├── tray.rs             # 系统托盘：左键开合面板、右键菜单（打开启动器 / 退出）
 │   │   ├── error.rs            # 全局统一 AppError 枚举与面向前端的用户友好中文序列化
-│   │   ├── lib.rs              # 运行时装配：Builder 初始化、插件注册、setup 与命令挂载
+│   │   ├── lib.rs              # 运行时装配：Builder 初始化、插件注册、setup_desktop（快捷键 / 托盘 / 窗口事件）与命令挂载
 │   │   └── main.rs             # 可执行文件入口：静默启动、控制台隐藏与 lib::run 调用
 │   ├── build.rs                # Tauri 构建脚本
 │   ├── Cargo.toml              # Rust 项目清单与依赖管理
@@ -198,8 +202,9 @@ git commit -m "chore: initialize project from tauri-vue-starter template"
 ### 1. 前端通信分层 (IPC Architecture)
 
 - **禁止组件直接调用 `invoke`**：所有前后端 IPC 通信必须收敛在 `src/lib/api.ts` 中。
-- **运行时环境降级**：`api.ts` 借助 `runtime.ts` 的 `isTauriRuntime()` 检测是否存在 `__TAURI_INTERNALS__`。在浏览器开发环境中自动走 Mock 分支，保证页面可用，防止调用崩溃。
+- **运行时环境降级**：`api.ts` 借助 `runtime.ts` 的 `isTauriRuntime()` 检测是否存在 `__TAURI_INTERNALS__`。在浏览器开发环境中自动走降级分支，保证页面可用，防止调用崩溃。
 - **类型一致性**：可失败的 Rust 命令返回 `Result<T, AppError>`，前端捕获的 `error` 即为格式化好的中文字符串，直接绑定在视图提示中即可。
+- **Tauri API 三个入口**：`@tauri-apps/api/core` 只在 `lib/api.ts`，`@tauri-apps/api/window` 只在 `lib/window.ts`（仅尺寸同步），`@tauri-apps/api/event` 只在 `composables/useTauriEvent.ts`；窗口显示 / 隐藏由 Rust 侧控制，前端隐藏走 `hideLauncher()` 命令。
 
 ### 2. Tailwind CSS v4 三层设计令牌
 

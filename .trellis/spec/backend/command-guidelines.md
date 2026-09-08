@@ -1,17 +1,25 @@
 # 命令规范(#[tauri::command])
 
-> 参考实现:`src-tauri/src/commands/greet.rs`。命令是前端唯一能调用的 Rust 入口,也是**信任边界**。
+> 参考实现:`src-tauri/src/commands/launcher.rs`(不可失败命令的样板:`hide_launcher` 返回 `()`、`get_toggle_shortcut` 返回 `&'static str`,两者都只转发到 `crate::launcher`)。命令是前端唯一能调用的 Rust 入口,也是**信任边界**。
 
 ---
 
 ## 1. 签名
 
 ```rust
-/// 向指定名字问好。
+// 示意:可失败命令的形态。仓库当前所有命令均不可失败,第一个可失败命令出现时按这个样子写
+/// 重命名当前配置。
 ///
 /// `name` 为用户输入,去除首尾空白后为空则返回参数错误,由前端直接展示文案。
 #[tauri::command]
-pub fn greet(name: &str) -> Result<String, AppError> { … }
+pub fn rename_profile(name: &str) -> Result<String, AppError> { … }
+
+// 现实样板(commands/launcher.rs):不可失败就直接返回 T;窗口 API 的失败已在领域层记日志,前端无需也无法处理
+#[tauri::command]
+pub fn hide_launcher<R: Runtime>(app: AppHandle<R>) { crate::launcher::hide(&app); }
+
+#[tauri::command]
+pub fn get_toggle_shortcut() -> &'static str { crate::launcher::DEFAULT_TOGGLE_SHORTCUT }
 ```
 
 - 必须 `pub`(在独立模块里定义命令的官方要求),命令名不受模块作用域影响,全局唯一。
@@ -67,7 +75,8 @@ pub async fn update_settings(
 }
 ```
 
-- 校验放在命令层最前面,失败返回 `AppError::InvalidInput("中文原因")`;用 `trim()` 处理字符串输入(`greet.rs`)。
+- 校验放在命令层最前面,失败返回 `AppError::InvalidInput("中文原因")`;字符串输入先 `trim()` 再判空。
+- 窗口操作类命令(`hide_launcher`)不返回 `Result`:领域层 `launcher.rs` 已把所有 Tauri 窗口 API 的失败 `log::warn!` 并继续,前端拿到错误也做不了什么(窗口没隐藏只是留在屏幕上);不为了〈看起来统一〉包一层 `Ok(())`。
 - 命令体不写业务规则(见 `directory-structure.md` 三段式);经验值超过 ~30 行就该考虑拆。
 - 不在命令里 `block_on`(仅允许 setup 阶段使用);不在 async 命令里 `std::thread::sleep` / 忙等。
 - CPU 密集或阻塞 IO 用 `tauri::async_runtime::spawn_blocking`,不要占住异步线程。
@@ -75,13 +84,13 @@ pub async fn update_settings(
 
 ## 4. 注册
 
-- 所有命令在 `lib.rs` 的 `generate_handler![commands::greet::greet, …]` 集中注册,一行一个,按领域分组。
+- 所有命令在 `lib.rs` 的 `generate_handler![commands::launcher::hide_launcher, commands::launcher::get_toggle_shortcut, …]` 集中注册,一行一个,按领域分组。
 - 桌面 / 移动专属命令用 `#[cfg(desktop)]` 标在命令函数上,并在注册处同样 cfg(规模小时直接写在 `lib.rs`;cfg 分支多了再把 handler 列表抽成函数)。
 
 ## 5. 测试
 
-- 命令文件底部 `#[cfg(test)] mod tests`,测「校验被拒 → 正确变体 + 中文文案」和「正常路径」两类(`greet.rs` 的 `empty_name_is_rejected` / `greets_trimmed_name`)。
-- 需要 `AppHandle` / `State` 的命令不做单测;把逻辑下沉到领域层让其可测(测试都在纯逻辑层)。
+- 带校验的命令在文件底部 `#[cfg(test)] mod tests`,测「校验被拒 → 正确变体 + 中文文案」和「正常路径」两类;`AppError` 的序列化契约由 `error.rs` 的 `invalid_input_message_has_category_prefix` 锁定。
+- 需要 `AppHandle` / `State` / 窗口的命令不做单测;把逻辑下沉到领域层让其可测。现例:`launcher.rs` 把定位算法抽成纯函数 `anchor_position(work, window_size)`,三条测试(居中、副屏偏移、窄工作区贴左缘)不碰任何 Tauri 类型;真正调窗口 API 的 `position_anchored` 不测。
 - async 领域逻辑用 `#[tokio::test]`(需 `[dev-dependencies] tokio = { features = ["macros", "rt"] }`,当前未加,首次需要时添加并注释)。
 
 ## 6. 禁止

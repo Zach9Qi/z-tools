@@ -22,7 +22,7 @@
 ## 开发前检查清单
 
 1. 读 `directory-structure.md`,确认新文件的目录与命名;不要新建同义目录。
-2. 涉及 IPC → 读 `ipc-guidelines.md` + `../guides/ipc-contract.md`,确认 `invoke` 只在 `src/lib/api.ts`(或 `src/lib/api/**/*.ts`)、`@tauri-apps/api/window` 只在 `src/lib/window.ts`,并有浏览器降级分支。
+2. 涉及 IPC → 读 `ipc-guidelines.md` + `../guides/ipc-contract.md`,确认 `invoke` 只在 `src/lib/api.ts`(或 `src/lib/api/**/*.ts`)、`@tauri-apps/api/window` 只在 `src/lib/window.ts`、`@tauri-apps/api/event` 只在 `src/composables/useTauriEvent.ts`,并有浏览器降级分支。
 3. 涉及样式 → 读 `styling-guidelines.md`,只用语义令牌工具类。
 4. 涉及共享状态 → 读 `state-management.md`,先判断是否真的需要 store。
 5. 参照 `src/components/launcher/LauncherPanel.vue`(状态与异步错误套路)、`ToolTile.vue`(props / emits / 样式)、`src/lib/api.ts` / `src/lib/window.ts`(降级与 JSDoc)的注释密度和写法,保持一致。
@@ -32,7 +32,8 @@
 ## 质量检查
 
 - [ ] `bun run format && bun run format:check && bun run lint && bun run test && bun run build` 全部通过。
-- [ ] `.vue` / composable / store 中没有 `import { invoke }` / `import { listen }`(事件 composable 除外);`src/lib/window.ts` 之外没有 `@tauri-apps/api/window`。
+- [ ] `.vue` / composable / store 中没有 `import { invoke }` / `import { listen }`;`@tauri-apps/api/event` 只在 `src/composables/useTauriEvent.ts`;`src/lib/window.ts` 之外没有 `@tauri-apps/api/window`。
+- [ ] 没有写死唤出快捷键键位(键帽来自 `getToggleShortcut()`,字面量只在 `api.ts` 的浏览器回退值)。
 - [ ] 每个 `invoke<T>()` 有泛型;每个 `api.ts` 函数有非 Tauri 分支。
 - [ ] 没有 `any`、`!` 非空断言、TS `enum`、`console.log`。
 - [ ] 组件内没有字面色值、`bg-zinc-*`、`dark:` 变体。
@@ -59,7 +60,10 @@
 | 前端持久化 | 暂不规定 | 业界无统一做法,本项目暂不规定 |
 | 快捷键登记表 | Pinia store(`stores/keymap.ts`)+ `useKeymap` 登记 / `useKeymapListener` 单点监听 | 登记方(工具页、导航 composable)与消费方(页脚)不相邻,属跨组件共享;规范禁模块级单例与 `provide/inject` 传业务状态。监听只挂一处,公共规则(`isComposing` / Tab 拦截 / 组合键放过)不散落 |
 | 启动器视图状态 | `LauncherPanel` 本地 ref + props / emits | 消费者都是直接子组件,两层以内不引 store |
-| 窗口 API 落点 | `lib/window.ts` 直调 `@tauri-apps/api/window`,浏览器 no-op,失败只 `console.error` | 与 `lib/api.ts` 同层同规则(唯一入口 + 降级);隐藏 / 改尺寸不值得为此建 Rust 命令 |
+| 窗口 API 落点 | `lib/window.ts` 直调 `@tauri-apps/api/window`,**只做尺寸同步**;浏览器 no-op,失败只 `console.error` | 与 `lib/api.ts` 同层同规则(唯一入口 + 降级);改尺寸是纯前端侧的布局反馈,不值得建 Rust 命令 |
+| 窗口隐藏 | 走后端命令 `hideLauncher()`(`api.ts`),不直调 `getCurrentWindow().hide()`;capabilities 不给 `allow-hide` | 隐藏在 Rust 侧是一串时序(`set_ignore_cursor_events(true)` → hide → emit close),前端直调会绕过它留下透明挡点区;显示 / 隐藏的另几个入口(快捷键 / 托盘 / 失焦)本来就在 Rust |
+| 唤出键键帽 | 挂载时 `getToggleShortcut()` 读后端当前生效值,`parseShortcut()` 拆成键帽;不在组件 / 模板写死 | 快捷键预留可配置,真相在后端;前端写死会在后端改键后演错提示 |
+| 搜索框焦点环 | `SearchInput.vue` 写 `outline-hidden` 且不配 ring,是 `styling-guidelines.md` §4 / §9 的唯一显式例外 | 它是启动器内唯一且常驻的焦点目标,每次唤出都程序聚焦,环会常亮成突兀边框且不传递信息;其它输入框仍须配 ring |
 | 工具图标解析 | `tools/icons.ts` 手工 `Record<string, Component>`,未登记回退 `puzzle` | `unplugin-icons` 只能静态 import,无法按运行时字符串加载;图标缺失是视觉问题不应让网格渲染失败 |
 | 主页分区 | 暂只有「全部工具」 | 无使用历史,「最近使用 / 已固定」是空壳;`SectionId` 联合类型保留扩展余地 |
 | 工具与启动器的耦合点 | 仅 `types/tool.ts` 契约 + `tools/registry.ts` 登记 | 启动器不认识任何具体工具,工具不 import 启动器内部组件;删掉 `tools/demo/` 只需改 registry 一行 |

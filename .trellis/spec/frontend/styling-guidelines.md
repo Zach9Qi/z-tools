@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 原始层 | `:root` | 唯一允许写具体值的地方:颜色用 `light-dark(var(--color-zinc-*), …)`、透明用 `--alpha(… / n%)`、圆角基准 `--radius`、根字号、字体栈、z-index 档位 `--z-*` | 字面色值(`#fff`、`rgb()`、`oklch()`) |
 | 语义层 | `@theme inline` | 只做映射与派生:`--color-background: var(--background)`、`--radius-sm: calc(var(--radius) - 4px)` | 任何具体值 |
-| 基础层 | `@layer base` | 全局行为策略:根字号、`html { color-scheme: light dark }`、细滚动条(`scrollbar-width` / `scrollbar-color`)、`body` 消费语义令牌设文档底色 / 文字色 / 字体族并关闭 overscroll 回弹、字体平滑、`button { cursor: pointer }`、默认 `border-color`、`outline-color` 焦点兜底、`::selection`、`prefers-reduced-motion` 全局停用动效 | 具体色值、原始色变量(`var(--color-zinc-*)`) |
+| 基础层 | `@layer base` | 全局行为策略:根字号、`html { color-scheme: light dark }`、细滚动条(`scrollbar-width` / `scrollbar-color`)、`body` 消费语义令牌设文字色 / 字体族并关闭 overscroll 回弹(**不设底色**:透明启动器窗口要求文档底透明,见 §3)、字体平滑、`button { cursor: pointer }`、默认 `border-color`、`outline-color` 焦点兜底、`::selection`、`prefers-reduced-motion` 全局停用动效 | 具体色值、原始色变量(`var(--color-zinc-*)`)、`body` 底色 |
 | 消费层 | `.vue` 组件 | 语义工具类:`bg-card`、`text-muted-foreground`、`bg-primary text-primary-foreground`、`border-input`、`focus-visible:ring-ring/50`、`z-(--z-modal)` | 原始色工具类 `bg-zinc-900`、任意值 `bg-[#123]`、裸 `z-50` / `z-[999]` |
 
 ## 2. 令牌表
@@ -21,7 +21,7 @@
 
 | 令牌 | 浅色 | 深色 | 用途 | 禁止 |
 |---|---|---|---|---|
-| `background` | `white` | `zinc-950` | 页面底(由 `body` 消费) | 卡片、弹层 |
+| `background` | `white` | `zinc-950` | 「页面底」令牌。`body` **不再**消费它(透明窗口,见 §3);当前唯一消费者是 `ToolTile.vue` 磁贴图标盒 `bg-background`——在 `card` 上画一块「比表面低一档」的底;未来非透明页面也用它 | 卡片、弹层 |
 | `foreground` | `zinc-800` | `zinc-100` | 主文字 | — |
 | `card` / `card-foreground` | `white` / `=foreground` | `zinc-900` / `=foreground` | 卡片、面板、侧栏等**静态表面** | 悬浮层 |
 | `popover` / `popover-foreground` | `white` / `=foreground` | `zinc-900` / `=foreground` | dropdown、tooltip、dialog 等**悬浮表面**,必配 `border shadow-md` | 页内静态容器 |
@@ -68,7 +68,7 @@
 
 - 靠 `light-dark()` + `@layer base` 里的 `html { color-scheme: light dark }`,跟随系统,无 JS、无 `dark:` 变体。
 - `color-scheme` **必须和 `:root` 上的 `light-dark()` 令牌声明在同一元素(html)上**,不要在组件里用 `scheme-*` 工具类充当主题根。原因见 `index.css` 注释:一是 Teleport 到 body 的弹层会脱离组件子树;二是构建时 Lightning CSS 会 polyfill `light-dark()`,开关变量不在 `:root` 上时所有颜色令牌都会算成非法值。
-- 文档级底色 / 文字色 / 字体族由 `@layer base` 的 `body` 承担(`var(--color-background)` / `var(--color-foreground)` / `var(--font-sans)`),这样 Teleport 弹层等脱离布局容器的区域不会露出 webview 白底。布局组件(`App.vue` 的 `<main>`)不写 `bg-background text-foreground font-sans`;需要局部换底时才在容器上用 `bg-card` / `bg-muted` 等令牌。
+- **透明启动器窗口**:`html` / `body` **不设底色**,文档底保持透明,面板圆角外才不会露底(`tauri.conf.json5` `transparent:true`);表面色由面板根 `LauncherPanel.vue` 的 `bg-card text-card-foreground` 承担。`body` 仍负责文字色 / 字体族(`var(--color-foreground)` / `var(--font-sans)`);`color-scheme` 仍在 `html`(上一条的 Lightning CSS 约束不变)。布局组件(`App.vue` 的 `<main>`)**不**写 `bg-background`——那会让透明窗口再次露底;Teleport 到 body 的弹层自己带 `bg-popover`。浏览器预览(`bun run dev`)下页面底是浏览器默认色,深色系统下浅色面板外是白底,这是预览态可接受的,不为它加底。
 - **深色表面提亮**:深色下 `background` 取 `zinc-950`,`card` / `popover` 取 `zinc-900`,表面比页面底亮一档来表达层级(与 shadcn v4 zinc 主题一致);浅色下两者同白,层级靠 `border`。详见 §5。
 - 需要手动切换主题时,在 `html` 上覆盖 `color-scheme`(如加 `scheme-dark` 类),仍不写 `dark:`。
 - 不使用 `dark:` 前缀写双份样式;要新颜色就加令牌。
@@ -88,7 +88,7 @@
 - **hover 用实底变色**(`hover:bg-primary/90`),不用 `hover:opacity-*`:后者会让文字、图标一起变淡。
 - **disabled 用 `pointer-events-none`**,不用 `cursor-not-allowed`:前者顺带挡掉 hover 变色;`cursor-not-allowed` 在 `pointer-events-none` 下本就不会显示。
 - **焦点用半透明 3px 环**(`ring-3 ring-ring/50`,Tailwind 4 中 `ring-3` 是合法动态值),深色下比 2px 实色环更柔和;表单控件同时把描边换成 `focus-visible:border-ring`。
-- **焦点兜底**:基础层给 `*` 设了 `outline-color: --alpha(var(--color-ring) / 50%)`,组件即使漏写 `focus-visible:ring` 也有可见轮廓(WebKit 对 `outline-style: auto` 可能忽略颜色、回落到系统色,但仍可见);写了 ring 的组件配 `outline-hidden` 避免双环。**不允许** `outline-hidden` 后不补 `focus-visible:ring`。
+- **焦点兜底**:基础层给 `*` 设了 `outline-color: --alpha(var(--color-ring) / 50%)`,组件即使漏写 `focus-visible:ring` 也有可见轮廓(WebKit 对 `outline-style: auto` 可能忽略颜色、回落到系统色,但仍可见);写了 ring 的组件配 `outline-hidden` 避免双环。**不允许** `outline-hidden` 后不补 `focus-visible:ring`(唯一例外见 §10 启动器搜索框)。
 - **用 `outline-hidden` 而不是 `outline-none`**:Tailwind 4 中 `outline-none` 是 `outline-style: none`,会连高对比模式一起关掉;`outline-hidden` 是 `outline: 2px solid transparent`,正常模式下不可见,`forced-colors` 下 `box-shadow`(即 `ring`)被系统清除时透明 outline 会被系统色替换,焦点仍可见。
 - `accent` 只做 hover / 选中的叠加底,不做主按钮底色。
 
@@ -98,7 +98,7 @@
 
 | 表面 | 令牌 | 描边 / 阴影 | 例子 |
 |---|---|---|---|
-| 页面底 | `background`(由 `body` 消费,组件不写) | — | `App.vue` `<main>` |
+| 页面底 | **透明**(`body` 不设底色,`App.vue` `<main>` 也不写 `bg-background`);`background` 令牌只用于表面上「低一档」的局部底 | — | 启动器窗口圆角外;`ToolTile.vue` 图标盒 `bg-background` |
 | 静态表面 | `bg-card text-card-foreground` | `border`(+ 可选 `shadow-sm`) | `LauncherPanel.vue` 面板根 `<section>` |
 | 悬浮表面 | `bg-popover text-popover-foreground` | `border shadow-md` | dropdown、tooltip、dialog |
 | 次级静态底 | `bg-muted` | — | 徽章、`<code>` 片段 |
@@ -143,7 +143,7 @@
 
 - 文字与其底色的对比度满足 WCAG AA(4.5:1):`foreground` / `primary-foreground` / `destructive` 在对应底上已满足;`muted-foreground` 只用于辅助说明,不承载关键信息。
 - 非文字对比(WCAG 1.4.11,3:1):`border-input` 与主按钮底满足;焦点环 `ring-ring/50` 对齐 shadcn v4,浅色下低于 3:1,这是有意取舍——表单控件靠 `focus-visible:border-ring` 补强,不要再为此单独调环色。
-- 焦点不可隐藏:`outline-hidden` 必须与 `focus-visible:ring-*` 成对出现(§4);基础层 `outline-color` 兜底只是保险,不是免写 ring 的理由。
+- 焦点不可隐藏:`outline-hidden` 必须与 `focus-visible:ring-*` 成对出现(§4;唯一例外见 §10);基础层 `outline-color` 兜底只是保险,不是免写 ring 的理由。
 - `forced-colors`(Windows 高对比模式)下不写 `forced-color-adjust: none`,让系统替换颜色。该模式会清除 `box-shadow`,即 `ring` 焦点环不可见;控件轮廓靠 `border` 保证(颜色被替换但仍存在),焦点靠 `outline-hidden` 的透明 outline 被系统色替换后显示(§4)。
 - 装饰图标 `aria-hidden="true"`,仅图标按钮要有 `aria-label`(见 `quality-guidelines.md` §5)。
 - 深浅色都必须验证:页面底 / 卡片底 / 主按钮 / 错误文案四者可区分,Tab 到控件焦点环可见。
@@ -155,7 +155,7 @@
 - **overscroll**:`body { overscroll-behavior: none }`,桌面应用不需要回弹。
 - **自定义标题栏 / 拖拽区**:承载拖拽的元素加 `data-tauri-drag-region`,并给该 chrome 区域加 `select-none` 防止拖动时选中文字;拖拽区内的按钮不继承拖拽(Tauri 只对带属性的元素本身生效)。
 - **不在 `body` 全局 `user-select: none`**:内容区文字必须可选中复制;`select-none` 只加在标题栏、工具栏等 chrome 区(`HomeSearchBar.vue` / `ToolSearchBar.vue` 的搜索栏外框)。
-- **透明底输入框也要 `outline-hidden` + ring**:搜索栏这类由外层承担表面的 `bg-transparent` 输入框不写 `border-input`,但焦点环不能省;给它一个小于外框的固定高度与 `rounded-md`,让环不贴外框上下边(`SearchInput.vue`:`h-10 rounded-md bg-transparent outline-hidden focus-visible:ring-3 focus-visible:ring-ring/50`)。
+- **启动器搜索框不画焦点环——§4 / §9「`outline-hidden` 必配 ring」的唯一显式例外**:`SearchInput.vue` 写 `outline-hidden` 且**不**配 `focus-visible:ring`。理由:它是启动器内唯一且常驻的焦点目标,每次唤出都由程序聚焦,焦点环会常亮成一圈突兀的边框而不传递任何信息;焦点位置由光标与面板本身表达。它仍是 `bg-transparent`、由外层搜索栏承担表面、不写 `border-input`。**其它任何输入框**(包括将来工具页内的表单控件)仍须按 §4 配 ring:它们不是唯一焦点目标,环是用户判断「焦点在哪」的依据。新增例外必须回到本条登记并写理由。
 
 ## 11. 组件变体写法
 
@@ -202,7 +202,8 @@ const { variant = "default", size = "md" } = defineProps<{
 - 实底按钮 hover 用 `hover:opacity-*`(用 `hover:bg-primary/90` 等实底变色)。
 - 裸 `z-*` 数字(`z-10` / `z-50`)与任意值 `z-[...]`(用 `z-(--z-*)`)。
 - 组件内 `motion-reduce:` 双写(reduced-motion 已由基础层全局处理)。
-- `outline-hidden` 后不补 `focus-visible:ring-*`。
+- `outline-hidden` 后不补 `focus-visible:ring-*`(唯一例外:启动器搜索框,见 §10)。
+- `body` / `App.vue` `<main>` 设底色(透明窗口会露底,见 §3)。
 - 全局 `<style>`、在组件里 `@import` CSS。
 - 新建第二个全局 CSS 文件(主题相关只改 `index.css` 的 `:root`)。
 - `!important` / `!` 修饰符:唯一例外是基础层的 `prefers-reduced-motion`;其他场景需要它通常意味着令牌或层叠层设计有问题,先修根因;确实需要(覆盖第三方内联样式)时写注释。

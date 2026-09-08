@@ -26,7 +26,7 @@ src/components/*.vue
 
 本仓库最常见的跨层 bug:
 
-- 前端 `invoke("greet", { name })` 的参数 key 与 Rust 形参对不上,运行时才报「missing required key」;
+- 前端 `invoke("xxx", { userName })` 的参数 key 与 Rust 形参对不上,运行时才报「missing required key」;
 - Rust 结构体改了字段,`src/types/<domain>.ts` 手写镜像没同步,前端读到 `undefined` 且无报错;
 - 新增了 Rust 命令却忘了在 `lib.rs` 的 `generate_handler!` 里注册,前端调用直接失败;
 - 浏览器预览(`bun run dev`)的降级分支返回形状与真实命令不一致,两种运行环境表现不同;
@@ -69,21 +69,41 @@ src/components/*.vue
 - 精确的输出格式(Rust 返回类型 ↔ `invoke<T>` 的 `T` ↔ `src/types/<domain>.ts`);
 - 会发生哪些错误(`AppError` 哪些变体;前端拿到的是**中文字符串**,不是对象)。
 
-以现有的 `greet` 为例,契约是:
+以现有的 `hide_launcher`(无参、不可失败)为例,命令方向的契约是:
 
 ```ts
 // src/lib/api.ts
-invoke<string>("greet", { name });                    // key: name(camelCase)
+export function hideLauncher(): Promise<void> {
+  if (!isTauriRuntime()) return Promise.resolve(); // 浏览器预览:没有窗口可隐藏,no-op
+  return invoke<void>("hide_launcher");
+}
 ```
 
 ```rust
-// src-tauri/src/commands/greet.rs
+// src-tauri/src/commands/launcher.rs
 #[tauri::command]
-pub fn greet(name: &str) -> Result<String, AppError>  // 形参: name(snake_case,自动映射)
+pub fn hide_launcher<R: Runtime>(app: AppHandle<R>) { crate::launcher::hide(&app); } // 返回 (),前端 invoke<void>
 ```
 
-`Err(AppError::InvalidInput("名字不能为空"))` 经 `error.rs` 的 `Serialize` 实现变为字符串 `"参数错误: 名字不能为空"`,
-前端 `catch (error)` 后 `String(error)` 即可展示(`LauncherPanel.vue` 的 `activate()` 对 launch 型工具的 `run()` 失败就是这么做的:`console.error` + 写入 `error` ref)。
+窗口 API 的失败在领域层 `launcher.rs` 里 `log::warn!` 后吞掉,所以前端的 `.catch` 只可能接到 IPC 层异常,`console.error` 即可。可失败命令的路径则是:`Err(AppError::InvalidInput("名字不能为空"))` 经 `error.rs` 的 `Serialize` 实现变为字符串 `"参数错误: 名字不能为空"`,前端 `catch (error)` 后 `String(error)` 即可展示(`LauncherPanel.vue` 的 `activate()` 对 launch 型工具的 `run()` 失败就是这么做的:`console.error` + 写入 `error` ref)。
+
+事件方向以 `launcher://open` 为例:
+
+```rust
+// src-tauri/src/launcher.rs
+pub const LAUNCHER_OPENED: &str = "launcher://open";
+if let Err(e) = app.emit(LAUNCHER_OPENED, ()) { log::warn!("发送 {LAUNCHER_OPENED} 事件失败: {e}"); } // 无 payload emit ()
+```
+
+```ts
+// src/lib/events.ts
+export const EVENTS = { LAUNCHER_OPENED: "launcher://open", … } as const;
+export interface EventPayloads { [EVENTS.LAUNCHER_OPENED]: null; … }
+// LauncherPanel.vue
+useTauriEvent(EVENTS.LAUNCHER_OPENED, () => searchBar.value?.focus({ selectAll: true }));
+```
+
+两侧字面量各一份是设计(跨语言无法共享),所以改名时必须 `grep "launcher://"` 两侧同步——否则前端静默收不到事件且无报错。
 
 ---
 

@@ -31,12 +31,12 @@
 
 ```bash
 # 以下命令在 Git Bash(Windows)或任何 POSIX shell 下执行
-# 找同名或相近的函数 / 类型
-grep -rn "greet" src/ src-tauri/src/
+# 找同名或相近的函数 / 类型(命令名两侧写法不同,用公共词干搜)
+grep -rn "hide_launcher\|hideLauncher" src/ src-tauri/src/
 
 # 找同一段逻辑的关键词(例如错误文案、事件名、命令名)
 grep -rn "名字不能为空" src/ src-tauri/src/
-grep -rn "settings://" src/ src-tauri/src/
+grep -rn "launcher://" src/ src-tauri/src/
 ```
 
 前后端一起搜。IPC 两侧的命令名、事件名、错误文案本质上是同一份契约,只搜一侧会漏掉另一半。
@@ -59,7 +59,10 @@ grep -rn "settings://" src/ src-tauri/src/
 | 事件名与 payload 类型 | `src/lib/events.ts` | 领域模块内的事件常量 |
 | Rust 结构体镜像类型 | `src/types/<domain>.ts` | 领域模块 |
 | 可复用的响应式逻辑 | `src/composables/useXxx.ts` | —— |
-| 窗口控制(隐藏 / 改尺寸) | `src/lib/window.ts`(唯一 `@tauri-apps/api/window` 入口) | ——(本阶段不建 Rust 命令) |
+| 窗口尺寸同步 | `src/lib/window.ts`(唯一 `@tauri-apps/api/window` 入口,只做 setSize) | —— |
+| 窗口显示 / 隐藏 / 定位 / 失焦策略 | `src/lib/api.ts` 的 `hideLauncher()`(前端只有隐藏入口) | `src-tauri/src/launcher.rs`(命令 / 托盘 / 快捷键三处消费者共用) |
+| Rust 事件监听 | `src/composables/useTauriEvent.ts`(唯一 `@tauri-apps/api/event` 入口) | —— |
+| 唤出快捷键键位 | `api.ts` `getToggleShortcut()` 读后端;浏览器回退值是前端唯一字面量 | `launcher::DEFAULT_TOGGLE_SHORTCUT`(唯一定义处) |
 | 快捷键登记 / 页脚提示 | `src/stores/keymap.ts` + `useKeymap` | —— |
 | 工具契约与登记 | `src/types/tool.ts`、`src/tools/registry.ts`、`src/tools/icons.ts` | —— |
 | 错误类型与文案 | 由后端序列化字符串直接展示 | `src-tauri/src/error.rs`(`AppError`) |

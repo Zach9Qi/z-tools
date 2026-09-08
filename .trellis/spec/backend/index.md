@@ -13,7 +13,7 @@
 | [command-guidelines.md](./command-guidelines.md) | `#[tauri::command]` 签名、参数序列化、命令体顺序、注册、测试 | 写或改命令 |
 | [error-handling.md](./error-handling.md) | `AppError` 形态、文案规则、何时引入 anyhow / 结构化错误、panic 策略 | 任何返回 `Result` 的代码 |
 | [state-events-async.md](./state-events-async.md) | `app.manage` 托管状态与锁选型、事件命名与 payload、异步运行时约束 | 引入共享状态、事件、后台任务 |
-| [config-and-permissions.md](./config-and-permissions.md) | `tauri.conf.json5`、capabilities 最小权限、`Cargo.toml`、日志、平台差异 | 改配置、加插件 / 依赖、写平台代码 |
+| [config-and-permissions.md](./config-and-permissions.md) | `tauri.conf.json5`、capabilities 最小权限、`Cargo.toml`、日志、平台差异、启动器窗口约定(show / hide 时序、失焦、托盘、快捷键) | 改配置、加插件 / 依赖、写平台代码、改窗口行为 |
 | [quality-guidelines.md](./quality-guidelines.md) | fmt / clippy / test 门禁、内联测试、`//!` 与 `///` 文档、反模式速查 | 提交前 |
 
 ## 开发前检查清单
@@ -23,7 +23,7 @@
 3. 新错误 → 读 `error-handling.md`:加变体 + `///` + 中文文案 + `to_string()` 测试。
 4. 共享状态 / 事件 / 后台任务 → 读 `state-events-async.md`。
 5. 加插件 / 依赖 / 改配置 → 读 `config-and-permissions.md`,权限最小化,配置项与依赖带中文注释。
-6. 参照 `src-tauri/src/commands/greet.rs`、`error.rs`、`lib.rs` 的注释密度与写法。
+6. 参照 `src-tauri/src/commands/launcher.rs`(薄命令)、`launcher.rs`(领域层 + 纯函数测试)、`tray.rs`(事件 → 领域函数映射)、`error.rs`、`lib.rs`(`setup_desktop` 顺序注释)的注释密度与写法。
 7. 同步前端:命令 → `src/lib/api.ts`;事件 → `src/lib/events.ts`;结构体 → `src/types/`(见 `../guides/ipc-contract.md`)。
 
 ## 质量检查
@@ -51,3 +51,8 @@
 | TS 类型生成 | 不用 ts-rs / specta,手写镜像 | 当前 IPC 面很小,手写成本低于引入代码生成链 |
 | `[profile.release]` / `[lints]` | 暂不配置 | abort + strip(体积小)与 unwind + 保留符号(便于崩溃分析)取向相反,需要时按发布需求另开任务 |
 | edition | 2024,MSRV 1.85 | 本仓库已定 |
+| 窗口显示 / 隐藏 | 由 Rust 控制(快捷键 / 托盘 / 失焦 / `hide_launcher` 命令),前端不给 `allow-hide` | 隐藏要顺带 `set_ignore_cursor_events(true)` 并 emit 事件,前端直调 `hide()` 会绕过这两步留下透明挡点区 |
+| 无 payload 事件 | emit `()`,前端类型 `null` | 空结构体没有信息增量,只多一个名字要维护 |
+| 唤出快捷键 | 单一常量 `launcher::DEFAULT_TOGGLE_SHORTCUT`,经 `get_toggle_shortcut` 命令下发前端渲染键帽 | 预留可配置:到时只改命令实现读设置;字面量不在代码 / 文档各处散落 |
+| 托盘右键 | 只弹菜单,不动面板 | 用户右键可能只是想退出,面板不应因此消失;失焦回调已因光标在托盘上豁免 |
+| 平台钩子 cfg 写法 | `#[cfg(windows)]` 短写,不写 `target_os = "windows"` | 两者等价,短写更易读;非 Windows 不编译平台文件也不提供 stub |

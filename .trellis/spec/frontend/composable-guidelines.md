@@ -1,12 +1,13 @@
 # Composable 规范
 
-> Vue 官方术语是 composable(组合式函数),目录固定 `src/composables/`,不用 `hooks/`。现有三个:
+> Vue 官方术语是 composable(组合式函数),目录固定 `src/composables/`,不用 `hooks/`。现有四个:
 >
 > | 文件 | 职责 |
 > |---|---|
 > | `useKeymap.ts` | `useKeymap(bindings)`:把一份快捷键绑定登记进 `stores/keymap`,挂载登记 / 卸载注销 / 变化重新登记;`useKeymapListener()`:挂**唯一**的 `window keydown` 监听并转给 `store.dispatch`,只由 `LauncherPanel` 调一次 |
 > | `useRowNavigation.ts` | 磁贴网格的 `selectedIndex` + 方向键 / Enter 登记;下标计算全部交给 `lib/launcher/navigation.ts` 纯函数 |
 > | `useAutoHeight.ts` | `ResizeObserver` 观察面板根,高度变化时调 `lib/window.resizeLauncherToContent`;卸载 `disconnect` |
+> | `useTauriEvent.ts` | `useTauriEvent(EVENTS.X, handler)`:订阅一个 Rust 事件,payload 类型由 `lib/events.ts` 推导;非 Tauri 不订阅;卸载 unlisten 并处理 `listen` 晚于卸载 resolve 的竞态。**唯一**允许 import `@tauri-apps/api/event` 的文件;`LauncherPanel` 用它在 `launcher://open` 时聚焦搜索框 |
 
 ---
 
@@ -24,7 +25,7 @@
 - 接受参数时,允许传 `MaybeRefOrGetter<T>` 并用 `toValue()` 取值,让调用方既能传静态值也能传 ref。
 
 ```ts
-// src/composables/useTauriEvent.ts —— 示意
+// src/composables/useTauriEvent.ts —— 已落地,与仓库代码一致(真实文件每个局部变量带 /** */ 注释)
 import { onUnmounted } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { EventPayloads } from "@/lib/events";
@@ -34,21 +35,26 @@ import { isTauriRuntime } from "@/lib/runtime";
 export function useTauriEvent<K extends keyof EventPayloads>(
   name: K,
   handler: (payload: EventPayloads[K]) => void,
-) {
+): void {
   // 非 Tauri 环境没有事件总线,listen 会报错;降级为不订阅
   if (!isTauriRuntime()) return;
   let unlisten: UnlistenFn | undefined;
   let disposed = false;
-  listen<EventPayloads[K]>(name, (e) => handler(e.payload)).then((fn) => {
-    if (disposed) fn();
-    else unlisten = fn;
-  });
+  listen<EventPayloads[K]>(name, (e) => handler(e.payload))
+    .then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    })
+    // 订阅失败只记日志不抛:少收一个事件不应让 UI 进入错误态,也不让 Promise 悬空 reject
+    .catch((e) => console.error("监听事件失败:", e));
   onUnmounted(() => {
     disposed = true;
     unlisten?.();
   });
 }
 ```
+
+这个 composable 返回 `void` 而不是对象,是「返回对象」规则的合理省略:它没有任何可供调用方使用的状态,清理完全由生命周期接管。
 
 > 例外:`@tauri-apps/api/event` 只允许在这类事件 composable 里 import(见 `ipc-guidelines.md`)。
 

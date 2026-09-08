@@ -1,6 +1,6 @@
 # 状态、事件与异步
 
-> 本仓库目前没有托管状态、没有事件、没有异步命令;`lib.rs` 的 setup 注释已预留位置。以下是引入时的约定。
+> 本仓库目前没有托管状态、没有异步命令;`lib.rs` 的 setup 注释已预留位置。已有两个事件:`launcher://open` / `launcher://close`(`launcher.rs` 的 `LAUNCHER_OPENED` / `LAUNCHER_CLOSED`,无 payload,emit `()`),前端 `src/lib/events.ts` 镜像。以下是引入新状态 / 事件时的约定。
 
 ---
 
@@ -41,8 +41,9 @@ if let Err(e) = app.emit(SETTINGS_UPDATED, SettingsUpdated { key }) {
 }
 ```
 
-- 事件名 `domain://action`,定义为 `pub const` 放在 **emit 点所在的领域模块**,注释指向前端镜像常量。不写字面量到 `emit` 里。
+- 事件名 `domain://action`,定义为 `pub const` 放在 **emit 点所在的领域模块**,注释指向前端镜像常量。不写字面量到 `emit` 里。现实样板:`launcher.rs` 的 `LAUNCHER_OPENED` / `LAUNCHER_CLOSED` 与 `show()` / `hide()` 内的 emit。
 - payload 是独立结构体:`#[derive(Debug, Clone, Serialize)]` + `rename_all = "camelCase"`;可借用字段避免 clone(如上例 `SettingsUpdated<'a>`)。有多种形态时用 `#[serde(tag = "type")]` 的枚举。
+- **无 payload 的事件 emit `()`**(序列化为 `null`),前端 `EventPayloads` 对应类型写 `null`;不为此造空结构体——空结构体除了多一个名字要维护,对前端没有任何信息增量。将来真需要带数据时再改成结构体,两侧同一 PR 改。
 - payload 保持小:只发「什么变了」,前端需要完整数据时用现有命令再拉,避免 payload 长成第二份数据模型。
 - `emit` 失败只 `log::warn!`,不 `unwrap`、不让命令因此失败。
 - 只发给某个窗口用 `emit_to("main", …)`;全局广播用 `emit`。

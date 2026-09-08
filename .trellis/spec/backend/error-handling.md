@@ -39,7 +39,8 @@ impl serde::Serialize for AppError {
 - 新增变体的判据:前端需要看到**不同的文案类别**,或者有新的外部错误类型要 `#[from]`。不要为每个函数造一个变体。
 - 命令层校验失败统一 `AppError::InvalidInput("具体原因".into())`,原因不带「参数错误」前缀(枚举文案已带)。
 - 不要在文案里再拼动作(「保存设置失败: …」);动作上下文前端组件知道,重复拼接会出现「保存失败: 保存设置失败: …」。
-- 序列化契约有测试锁定:`greet.rs` 的 `assert_eq!(err.to_string(), "参数错误: 名字不能为空")`。新增变体时补一条同样的断言。
+- 序列化契约有测试锁定:`error.rs` 内联测试 `invalid_input_message_has_category_prefix` 同时断言 `to_string()` 文案与 `serde_json::to_string` 的 wire 格式(`"\"参数错误: 名字不能为空\""`)。新增变体时在同一个 `mod tests` 补一条同样的断言。
+- 当前没有可失败命令(启动器的窗口命令都在领域层吞错误记日志),`AppError` 因此在 `lib.rs` 以 `pub mod error` 导出,作为 crate 的错误契约保留:一是避免被 clippy 当成 dead_code 在 `-D warnings` 下编译失败,二是供后续命令与集成测试直接使用。第一个可失败命令出现时直接 `Result<T, AppError>`,不要另造错误类型。
 
 ## 3. 何时引入 anyhow
 

@@ -23,7 +23,7 @@
 - 格式:`type(scope): 中文描述`,遵循 Conventional Commits 的 type 集合:`feat` / `fix` / `docs` / `style` / `refactor` / `perf` / `test` / `build` / `ci` / `chore` / `revert`。
 - scope 可选,用英文小写,常用:`frontend`、`backend`、`ipc`、`ci`、`release`、`spec`、`deps`。
 - 发版提交由脚本固定生成为 `chore(release): vX.Y.Z`(`scripts/release.ts`),不要手写。
-- 描述用中文陈述句,不加句号,不加 emoji。示例:`feat(backend): 新增剪贴板读取命令`、`fix(frontend): 浏览器预览下 greet 降级文案未显示`。
+- 描述用中文陈述句,不加句号,不加 emoji。示例:`feat(backend): 新增剪贴板读取命令`、`fix(frontend): 浏览器预览下唤出键键帽未渲染`。
 - 一次提交只做一件事;husky + lint-staged + commitlint 本仓库**尚未接入**(见「待讨论」)。
 
 ## 3. 版本与发布

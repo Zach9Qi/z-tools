@@ -6,21 +6,29 @@
 
 ## 1. invoke 只能出现在 `src/lib/api.ts`(或拆分后的 `src/lib/api/**/*.ts`)
 
-- 同理,`@tauri-apps/api/window` **只允许在 `src/lib/window.ts`** import(`hideLauncher()` / `resizeLauncherToContent()`)。它与 `api.ts` 遵守同一套规则:非 Tauri 运行时降级为 no-op(浏览器改不了标签页尺寸也隐藏不了窗口),失败时 `console.error("中文前缀:", error)` 且**不抛**——窗口尺寸没同步、隐藏失败都只是视觉问题,不应让 UI 进入错误态。组件 / composable 只 `import { hideLauncher } from "@/lib/window"`。
-- 组件、composable、store 都不直接 `import { invoke }`;统一 `import { greet } from "@/lib/api"`。(README「禁止组件直接调用 invoke」)
+- 同理,`@tauri-apps/api/window` **只允许在 `src/lib/window.ts`** import,且该文件只做一件事:`resizeLauncherToContent()` 把面板高度 `setSize` 给窗口。**隐藏不走窗口 API**,而是 `api.ts` 的 `hideLauncher()` 命令封装:后端 `hide` 还要顺带 `set_ignore_cursor_events(true)`(透明窗口隐藏后会残留挡点区)并 emit `launcher://close`,前端直调 `getCurrentWindow().hide()` 会绕过这两步;capabilities 也因此不给 `core:window:allow-hide`。`window.ts` 与 `api.ts` 遵守同一套规则:非 Tauri 运行时降级为 no-op(浏览器改不了标签页尺寸),失败时 `console.error("中文前缀:", error)` 且**不抛**——窗口尺寸没同步只是视觉问题,不应让 UI 进入错误态。
+- 组件、composable、store 都不直接 `import { invoke }`;统一 `import { hideLauncher, getToggleShortcut } from "@/lib/api"`。(README「禁止组件直接调用 invoke」)
 - 每个命令一个导出函数,**函数名 = Rust 命令名的 camelCase**:`get_settings` → `getSettings()`。
 - 命令名以字符串字面量写在封装函数里,不建常量表、不用枚举、不引入 tauri-specta(命令名只在封装函数内出现一次,常量表没有收益)。
 - 命令多了按领域拆 `src/lib/api/<domain>.ts`,由 `src/lib/api/index.ts` 汇出,调用方 import 路径不变。
 
 ```ts
-// src/lib/api.ts —— 现有样板
-export function greet(name: string): Promise<string> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve(`（浏览器预览）你好，${name}！`);
-  }
-  return invoke<string>("greet", { name });
+// src/lib/api.ts —— 现有样板(两个命令都不可失败,reject 只可能是 IPC 层异常)
+
+/** 隐藏启动器窗口(主页 Esc)。非 Tauri 运行时没有窗口可隐藏,直接 resolve(no-op) */
+export function hideLauncher(): Promise<void> {
+  if (!isTauriRuntime()) return Promise.resolve();
+  return invoke<void>("hide_launcher");
+}
+
+/** 读当前生效的全局唤出快捷键(plugin 语法)。浏览器预览回退默认值——这是前端唯一允许出现该字面量的地方 */
+export function getToggleShortcut(): Promise<string> {
+  if (!isTauriRuntime()) return Promise.resolve(DEFAULT_SHORTCUT_FALLBACK); // 真实代码是字面量,与后端默认值一致;本文件不复述键位
+  return invoke<string>("get_toggle_shortcut");
 }
 ```
+
+唤出键的真相在后端(`launcher::DEFAULT_TOGGLE_SHORTCUT`,将来是用户设置):`LauncherPanel` 挂载时调 `getToggleShortcut()`,经 `lib/launcher/keyLabels.ts` 的 `parseShortcut()` 拆成键帽序列传给搜索栏。组件 / 模板 / 注释里**不写死键位**,否则后端改了前端演错提示。
 
 ## 2. 参数与返回值
 
@@ -45,23 +53,27 @@ export function greet(name: string): Promise<string> {
 
 ## 5. 事件(Rust → 前端)
 
-本仓库尚未使用事件;引入时按以下约定:
+已在用:`EVENTS.LAUNCHER_OPENED`(`launcher://open`,后端 show 后发,前端据此聚焦搜索框并全选旧词)与 `EVENTS.LAUNCHER_CLOSED`(`launcher://close`,当前无消费者,保留给隐藏时复位状态的需求);两者无 payload,`EventPayloads` 对应类型为 `null`(Rust 侧 emit `()`)。约定:
 
-- 事件名格式 `domain://action`,kebab-case,如 `settings://updated`。
-- 事件名常量与 payload 类型集中在 `src/lib/events.ts`:
+- 事件名格式 `domain://action`,kebab-case,如 `launcher://open`。
+- 事件名常量与 payload 类型集中在 `src/lib/events.ts`,文件头注明对应的 Rust 常量位置:
 
 ```ts
+// src/lib/events.ts —— 现有
 export const EVENTS = {
-  SETTINGS_UPDATED: "settings://updated",
+  LAUNCHER_OPENED: "launcher://open",
+  LAUNCHER_CLOSED: "launcher://close",
 } as const;
 
-/** 事件名 → payload 类型映射;与 Rust 侧 emit 的结构体一一对应 */
+/** 事件名 → payload 类型;与 src-tauri/src/launcher.rs 的常量一一对应;无 payload 写 null,不造空对象类型 */
 export interface EventPayloads {
-  [EVENTS.SETTINGS_UPDATED]: { key: string };
+  [EVENTS.LAUNCHER_OPENED]: null;
+  [EVENTS.LAUNCHER_CLOSED]: null;
 }
 ```
 
-- `listen` 封装成 composable(如 `useTauriEvent(name, handler)`),内部 `onUnmounted` 调用 unlisten;处理「组件已卸载但 `listen` 的 Promise 才 resolve」的竞态:resolve 后发现已卸载就立刻 unlisten。(Tauri 官方文档要求组件卸载时必须 unlisten)
+- 监听统一用 `src/composables/useTauriEvent.ts`(`useTauriEvent(name, handler)`):非 Tauri 不订阅;内部 `onUnmounted` 调用 unlisten;处理「组件已卸载但 `listen` 的 Promise 才 resolve」的竞态(resolve 后发现已卸载就立刻 unlisten);订阅失败 `.catch` 只记日志。(Tauri 官方文档要求组件卸载时必须 unlisten)
+- **`useTauriEvent.ts` 是整个 `src/` 唯一允许 import `@tauri-apps/api/event` 的文件**,与 `api.ts`(core)、`window.ts`(window)并列为三个 Tauri API 入口。
 - 不在组件里手写 `listen` + 手动保存 `unlistenFn`。
 - 大量或有序的数据流(下载进度、日志流)用 `Channel`,不用事件;事件系统官方定位是「少量数据、多生产者多消费者」。
 - payload 类型写在 `events.ts`,消费方不 `event.payload as X` 强转(这类强转是技术债)。
@@ -74,7 +86,9 @@ export interface EventPayloads {
 
 ## 7. 禁止
 
-- `.vue` / store 里 `import` `@tauri-apps/api/*`;composable 里 `import` `@tauri-apps/api/core` / `@tauri-apps/api/window`(`@tauri-apps/api/event` 仅限事件 composable);`src/lib/window.ts` 之外 `import` `@tauri-apps/api/window`。
+- `.vue` / store 里 `import` `@tauri-apps/api/*`;composable 里 `import` `@tauri-apps/api/core` / `@tauri-apps/api/window`;`src/composables/useTauriEvent.ts` 之外 `import` `@tauri-apps/api/event`;`src/lib/window.ts` 之外 `import` `@tauri-apps/api/window`。
+- 前端直调窗口 `hide()` / `show()`(走 `hideLauncher()` 命令;显示由 Rust 侧触发,前端没有入口)。
+- 在 `api.ts` 的 `getToggleShortcut()` 回退值之外写死唤出键字面量。
 - `invoke("cmd")` 不写泛型。
 - 参数 key 用 snake_case(Rust 侧不使用 `rename_all = "snake_case"`)。
 - 直接读 `window.__TAURI_INTERNALS__`。
