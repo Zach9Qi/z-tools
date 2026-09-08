@@ -36,7 +36,7 @@ export function useKeymap(bindings: MaybeRefOrGetter<KeyBinding[]>): void {
  * 在 window 上挂唯一的 keydown 监听,把事件交给 store.dispatch。
  * - 输入法合成期间(isComposing)一律放过,否则会吞掉候选词确认的 Enter。
  * - Tab / Shift+Tab 无条件拦截:焦点常驻搜索框,不允许跳到磁贴上。
- * - 带 alt / meta / shift 的组合键放过,交给系统 / 浏览器(Alt+Enter 等由 Rust 侧全局快捷键处理)。
+ * - 带 alt / meta / shift 的组合键放过,交给系统 / 浏览器(全局唤出键等由 Rust 侧全局快捷键处理)。
  * 组件卸载时移除监听。
  */
 export function useKeymapListener(): void {

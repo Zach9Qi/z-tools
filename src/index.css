@@ -130,14 +130,13 @@
     scrollbar-color: --alpha(var(--color-muted-foreground) / 40%) transparent;
   }
 
-  /* 文档级底色 / 文字色 / 字体族挂在 body,只消费语义令牌不写具体值:
-   * 这样内容短于视口、Teleport 到 body 的弹层等脱离布局容器的区域也不会露出 webview 白底 */
+  /* 透明启动器窗口:文档底必须保持透明,面板圆角外才不会露底;表面色由面板根 `bg-card` 承担。
+   * 文字色 / 字体族仍挂 body,只消费语义令牌不写具体值;`color-scheme` 仍在 html(见上方注释) */
   body {
-    background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
-    /* 桌面应用不需要 overscroll 回弹(回弹时也不会露底,因为底色已挂在 body) */
+    /* 桌面应用不需要 overscroll 回弹 */
     overscroll-behavior: none;
   }
 

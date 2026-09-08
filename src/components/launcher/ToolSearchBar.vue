@@ -8,6 +8,8 @@ import type { ViewToolModule } from "@/types/tool";
 const { module } = defineProps<{
   /** 当前打开的 view 型工具,徽章与 placeholder 都取自它 */
   module: ViewToolModule;
+  /** 全局唤出快捷键的键帽序列，由面板从后端读取；为空时不渲染提示 */
+  shortcutKeys: string[];
 }>();
 
 const emit = defineEmits<{
@@ -34,8 +36,9 @@ function onBackspace(e: KeyboardEvent): void {
   if (model.value === "") emit("close");
 }
 
-function focus(): void {
-  inputRef.value?.focus();
+/** 透传给内层输入框;参数语义见 SearchInput.focus */
+function focus(options?: { selectAll?: boolean }): void {
+  inputRef.value?.focus(options);
 }
 
 defineExpose({ focus });
@@ -60,9 +63,9 @@ defineExpose({ focus });
       :placeholder="placeholder"
       @keydown.backspace="onBackspace"
     />
-    <div class="flex shrink-0 items-center gap-1">
-      <KeyboardKey>Alt</KeyboardKey>
-      <KeyboardKey>Enter</KeyboardKey>
+    <!-- 全局唤出快捷键提示;键位来自后端当前生效值(可配置),不要在此写死 -->
+    <div v-if="shortcutKeys.length > 0" class="flex shrink-0 items-center gap-1">
+      <KeyboardKey v-for="key in shortcutKeys" :key="key">{{ key }}</KeyboardKey>
     </div>
   </div>
 </template>

@@ -25,14 +25,30 @@
       {
         // 窗口标识，代码里用这个名字查找窗口（capabilities/default.json 按此 label 授权）
         "label": "main",
-        // 窗口标题
+        // 窗口标题（无边框看不到，但任务管理器 / 辅助功能仍会读）
         "title": "tauri-vue-starter",
-        // 初始宽度（逻辑像素）
+        // 面板宽度（逻辑像素）——全仓库唯一定义处，前端 setSize 时沿用 window.innerWidth
         "width": 800,
-        // 初始高度（逻辑像素）
+        // 初始高度（逻辑像素），仅在前端首次按内容 setSize 之前生效
         "height": 600,
-        // 启动时居中显示
-        "center": true
+        // 创建时居中；每次唤出前 Rust 侧还会按当前显示器重新定位
+        "center": true,
+        // 启动即隐藏在托盘，不弹出面板，由 setup_desktop 的 init_hidden 接管
+        "visible": false,
+        // 启动时不抢焦点，与 visible:false 配套
+        "focus": false,
+        // 无系统标题栏与边框，面板自绘
+        "decorations": false,
+        // 透明窗口：面板圆角外露出桌面；要求前端 html/body 不设底色
+        "transparent": true,
+        // 唤出时压在其他窗口之上，避免被前台应用盖住
+        "alwaysOnTop": true,
+        // 不占任务栏，托盘是唯一常驻入口
+        "skipTaskbar": true,
+        // 不可拖拽缩放：高度由前端按内容 setSize 同步，宽度固定
+        "resizable": false,
+        // 关闭系统阴影：面板自带圆角边框，系统阴影会在透明区画出方框
+        "shadow": false
       }
     ],
     // 安全相关配置

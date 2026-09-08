@@ -1,6 +1,6 @@
 // 测试 formatKeyLabel():把 KeyboardEvent.key 转成页脚键帽上的短标签
 import { describe, expect, it } from "vitest";
-import { KEY_LABELS, formatKeyLabel } from "./keyLabels";
+import { KEY_LABELS, formatKeyLabel, parseShortcut } from "./keyLabels";
 
 describe("formatKeyLabel", () => {
   it("四个方向键映射为箭头符号", () => {
@@ -32,5 +32,28 @@ describe("formatKeyLabel", () => {
     for (const [key, label] of Object.entries(KEY_LABELS)) {
       expect(formatKeyLabel(key)).toBe(label);
     }
+  });
+});
+
+// 测试 parseShortcut():把后端的全局快捷键字符串拆成可读键帽序列
+describe("parseShortcut", () => {
+  it("默认唤出键拆成 Alt / Enter(Enter 保持可读,不用页脚的 ↵)", () => {
+    expect(parseShortcut("alt+enter")).toEqual(["Alt", "Enter"]);
+  });
+
+  it("多修饰键组合按顺序输出,单字母键转大写", () => {
+    expect(parseShortcut("ctrl+shift+k")).toEqual(["Ctrl", "Shift", "K"]);
+  });
+
+  it("super 统一显示为 Meta,space 显示为 Space", () => {
+    expect(parseShortcut("super+space")).toEqual(["Meta", "Space"]);
+  });
+
+  it("容忍首尾与 + 两侧的空白及大小写,功能键首字母大写", () => {
+    expect(parseShortcut(" Alt + F1 ")).toEqual(["Alt", "F1"]);
+  });
+
+  it("空字符串返回空数组", () => {
+    expect(parseShortcut("")).toEqual([]);
   });
 });

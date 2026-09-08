@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "主窗口权限：core:default + 启动器前端直接隐藏/调整窗口尺寸所需的两项 window 权限；新增 plugin 或窗口能力时按最小权限追加",
+  "description": "主窗口权限：core:default + 前端按内容高度 setSize；显示/隐藏由 Rust 侧 hide_launcher 命令 / 全局快捷键 / 托盘控制，不给前端 hide 权限。新增 plugin 或窗口能力时按最小权限追加",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-hide", "core:window:allow-set-size"]
+  "permissions": ["core:default", "core:window:allow-set-size"]
 }

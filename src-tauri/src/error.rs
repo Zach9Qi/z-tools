@@ -22,3 +22,17 @@ impl serde::Serialize for AppError {
         serializer.serialize_str(&self.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 锁定序列化契约：前端直接展示 to_string()，文案前缀不能漂移
+    #[test]
+    fn invalid_input_message_has_category_prefix() {
+        let err = AppError::InvalidInput("名字不能为空".into());
+        assert_eq!(err.to_string(), "参数错误: 名字不能为空");
+        let json = serde_json::to_string(&err).expect("AppError 应能序列化为字符串");
+        assert_eq!(json, "\"参数错误: 名字不能为空\"");
+    }
+}

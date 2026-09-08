@@ -22,7 +22,8 @@ tauri-build = { version = "2", features = ["config-json5"] }
 
 [dependencies]
 # config-json5：让 tauri.conf.json5 可带注释，每个配置项都要写中文说明
-tauri = { version = "2", features = ["config-json5"] }
+# tray-icon：启动器常驻后台且不在任务栏显示，托盘是用户开合面板 / 退出的唯一可见入口
+tauri = { version = "2", features = ["config-json5", "tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # 统一错误类型 AppError 的派生宏
@@ -30,3 +31,9 @@ thiserror = "2.0.20"
 # 日志门面 + Tauri 日志插件：业务代码用 log 宏，禁止 println! 调试
 log = "0.4.34"
 tauri-plugin-log = "2.9.1"
+# 全局快捷键：在任意前台应用下唤出 / 收起启动器面板（默认键见 launcher.rs）
+tauri-plugin-global-shortcut = "2"
+
+[target.'cfg(windows)'.dependencies]
+# 仅用于给无边框窗口装子类过程拦截 Alt 触发的系统菜单；版本对齐 tauri 的间接依赖，避免编译两份 windows crate
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

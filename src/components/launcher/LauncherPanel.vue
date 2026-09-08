@@ -1,15 +1,18 @@
 <script setup lang="ts">
 // 启动器壳:唯一持有视图状态(主页 / 工具页、两个搜索词、当前工具)的组件,
 // 子组件只通过 props / emits 与它通信;快捷键登记表走 store(页脚在另一支消费)。
-import { computed, nextTick, ref, useTemplateRef } from "vue";
+import { computed, nextTick, onMounted, ref, useTemplateRef } from "vue";
 import HomeSearchBar from "@/components/launcher/HomeSearchBar.vue";
 import LauncherFooter from "@/components/launcher/LauncherFooter.vue";
 import ResultsPanel from "@/components/launcher/ResultsPanel.vue";
 import ToolSearchBar from "@/components/launcher/ToolSearchBar.vue";
 import { useAutoHeight } from "@/composables/useAutoHeight";
 import { useKeymap, useKeymapListener } from "@/composables/useKeymap";
+import { useTauriEvent } from "@/composables/useTauriEvent";
+import { getToggleShortcut, hideLauncher } from "@/lib/api";
+import { EVENTS } from "@/lib/events";
+import { parseShortcut } from "@/lib/launcher/keyLabels";
 import { buildSections, type StampedItem } from "@/lib/launcher/search";
-import { hideLauncher } from "@/lib/window";
 import { catalog, moduleOf } from "@/tools/registry";
 import { isViewModule, type ViewToolModule } from "@/types/tool";
 
@@ -28,6 +31,8 @@ const activeModule = ref<ViewToolModule | null>(null);
 const message = ref("");
 /** launch 型工具执行失败的文案;与 message 互斥 */
 const error = ref("");
+/** 全局唤出快捷键的键帽序列;初始为空(不渲染),onMounted 从后端读取当前生效值填入,后续可配置时前端无需改动 */
+const shortcutKeys = ref<string[]>([]);
 
 /** 当前视图,由 activeModule 派生 */
 const view = computed<"home" | "tool">(() => (activeModule.value === null ? "home" : "tool"));
@@ -66,12 +71,12 @@ function closeTool(): void {
   void nextTick(() => searchBar.value?.focus());
 }
 
-/** Esc:工具页返回主页,主页隐藏窗口 */
+/** Esc:工具页返回主页,主页让后端隐藏窗口;隐藏失败只是窗口留在屏幕上,记日志不进错误态 */
 function onEscape(): void {
   if (view.value === "tool") {
     closeTool();
   } else {
-    void hideLauncher();
+    void hideLauncher().catch((e) => console.error("隐藏启动器失败:", e));
   }
 }
 
@@ -86,6 +91,17 @@ useKeymap(() => [
 ]);
 useKeymapListener();
 useAutoHeight(rootRef);
+// 唤出时窗口已 set_focus,但 WebView 内的焦点未必在输入框;且要全选旧搜索词让直接输入即覆盖
+// (不清空任何状态,Esc 仍可直接关闭)
+useTauriEvent(EVENTS.LAUNCHER_OPENED, () => searchBar.value?.focus({ selectAll: true }));
+// 唤出键提示只是文案,读取失败不进错误态,保持不渲染即可
+onMounted(() => {
+  getToggleShortcut()
+    .then((s) => {
+      shortcutKeys.value = parseShortcut(s);
+    })
+    .catch((e) => console.error("读取唤出快捷键失败:", e));
+});
 </script>
 
 <template>
@@ -100,7 +116,7 @@ useAutoHeight(rootRef);
     <!-- 两种搜索栏用 v-if 互斥重建而非 v-show:重建触发 SearchInput 的 onMounted 自动聚焦,
          也让 placeholder / 徽章随视图整体切换,不必在同一组件内做分支 -->
     <template v-if="view === 'home'">
-      <HomeSearchBar ref="searchBar" v-model="homeQuery" />
+      <HomeSearchBar ref="searchBar" v-model="homeQuery" :shortcut-keys="shortcutKeys" />
       <!-- 方向键 / Enter 的登记在 ResultsPanel 内部,随它一起卸载,工具页不受影响 -->
       <ResultsPanel :sections="sections" @activate="activate" />
     </template>
@@ -109,6 +125,7 @@ useAutoHeight(rootRef);
         ref="searchBar"
         v-model="toolQuery"
         :module="activeModule"
+        :shortcut-keys="shortcutKeys"
         @close="closeTool"
       />
       <!-- 工具页契约:接收 query prop;这里统一给根元素 flex min-h-0 flex-1,工具页不必各自重写才能撑满并内部滚动 -->
