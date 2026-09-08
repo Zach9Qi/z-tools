@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // 插件:typescript/unicorn/oxc 为默认集,vue 检查 SFC 的 script 块,import 提供循环依赖检测
+  "plugins": ["typescript", "unicorn", "oxc", "import", "vue"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    // 模块级循环依赖直接报错(与 spec 的单向依赖规则配套)
+    "import/no-cycle": "error"
+  },
+  // .pi/.trellis/.cursor/.agents/.codex 是 Trellis 工作流脚手架(trellis update 会覆盖),不属于产品代码
+  "ignorePatterns": [
+    "dist",
+    "node_modules",
+    "src-tauri",
+    ".pi",
+    ".trellis",
+    ".cursor",
+    ".agents",
+    ".codex"
+  ]
+}

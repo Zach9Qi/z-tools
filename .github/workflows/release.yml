@@ -1,0 +1,156 @@
+# 推送 v* tag 后自动发布:verify 校验版本与前端质量 → build 四个平台并行打包 → publish 一次性创建 Release。
+# 本地由 `bun run release <版本>` 负责同步版本号、commit、打 tag 并 push(见 scripts/release.ts 与 README)。
+# 任一平台构建失败则 publish 不会执行,不留半成品 Release;修好后删 tag 重推即可。
+# 第三方 action 固定大版本,且一律选 Node 24 运行时的版本(actions/* 的 v4 系列仍是 Node 20,
+# GitHub 托管 runner 于 2026-09-23 移除 Node 20):checkout@v6 / upload-artifact@v6 / download-artifact@v7 / action-gh-release@v3
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# 顶层只读,仅 publish job 提升为 contents: write(创建 Release、上传附件);全程只用 GITHUB_TOKEN
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: 校验版本号与前端质量
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 安装 bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: 安装依赖(锁定 bun.lock)
+        run: bun install --frozen-lockfile
+
+      # tag 版本(去掉 v 前缀)必须与 package.json / Cargo.toml / tauri.conf.json5 三处一致,
+      # 不一致由脚本输出中文原因并以非零退出,后续构建不会开始
+      - name: 校验 tag 与三处版本号一致
+        run: bun run version:check "$GITHUB_REF_NAME"
+
+      # format / lint / test 在这里跑一次即可,不必每个平台重复;前端 build 由 tauri-action 的 beforeBuildCommand 触发;
+      # Rust 侧 fmt / clippy 由 ci.yml 在 main 上保障,发布阶段不重复以节省时间
+      - name: 格式检查(Prettier)
+        run: bun run format:check
+
+      - name: Lint(oxlint)
+        run: bun run lint
+
+      - name: 单元测试(Vitest)
+        run: bun run test
+
+  build:
+    name: 打包(${{ matrix.name }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 一个平台失败其他平台继续跑完,方便一次看到全部问题;publish 因 needs 仍不会执行
+      fail-fast: false
+      matrix:
+        include:
+          # Windows:.msi + NSIS -setup.exe
+          - name: windows-x64
+            os: windows-latest
+            target: ""
+            args: ""
+          # macOS Apple Silicon:.dmg(显式指定 target,产物落在 target/aarch64-apple-darwin/)
+          - name: macos-aarch64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          # macOS Intel:.dmg,在 arm64 runner 上交叉编译,需要额外安装 rustup target
+          - name: macos-x64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+          # Linux:.deb / .rpm / .AppImage。选 24.04 而非 22.04:22.04 镜像自 2026-09-17 起弃用,
+          # 代价是 glibc 基线抬高、对更老发行版兼容性下降;Linux 是次要平台,可接受
+          - name: linux-x64
+            os: ubuntu-24.04
+            target: ""
+            args: ""
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      # Tauri 2 官方 Linux 依赖清单(脚手架未启用其他 feature / 系统插件,只装基础依赖);xdg-utils 供 AppImage 打包使用
+      - name: 安装 Linux 系统依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf xdg-utils
+
+      - name: 安装 bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: 安装依赖(锁定 bun.lock)
+        run: bun install --frozen-lockfile
+
+      - name: 安装 Rust 工具链(stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # 仅 macOS x64 需要额外交叉目标;其余平台为空字符串,action 会忽略
+          targets: ${{ matrix.target }}
+
+      - name: 缓存 cargo 产物
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # 两个 macOS job 同 runner、同 job id,靠 name 区分缓存,避免不同 target 互相覆盖
+          key: ${{ matrix.name }}
+
+      # 不传 tagName / releaseName / releaseId,tauri-action 只构建不建 Release;
+      # Release 统一交给 publish job 一次性创建,避免某个平台失败后留下半成品 Release。
+      # 配置必须是 tauri.conf.json5:action 对 .json 走 JSON.parse,带注释会直接失败
+      - name: 构建 Tauri 安装包
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+
+      # 按扩展名 glob 收集安装包而不用 tauri-action 的 artifactPaths 输出(JSON 数组字符串,表达式拼不出多行 path)。
+      # `**` 同时覆盖默认的 target/release/bundle 与 --target 时的 target/<triple>/release/bundle,
+      # 且天然排除 bundle 目录里的 staging 目录(*.AppDir、deb 解包目录、.app)
+      - name: 上传安装包 artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: bundles-${{ matrix.name }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/**/bundle/msi/*.msi
+            src-tauri/target/**/bundle/nsis/*.exe
+            src-tauri/target/**/bundle/dmg/*.dmg
+            src-tauri/target/**/bundle/deb/*.deb
+            src-tauri/target/**/bundle/rpm/*.rpm
+            src-tauri/target/**/bundle/appimage/*.AppImage
+
+  publish:
+    name: 创建 GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 下载全部平台安装包
+        uses: actions/download-artifact@v7
+        with:
+          path: bundles
+          pattern: bundles-*
+          # 四个 artifact 拉平到同一目录;各平台文件名自带架构 / 格式后缀,不会互相覆盖
+          merge-multiple: true
+
+      - name: 创建 Release 并上传附件
+        uses: softprops/action-gh-release@v3
+        with:
+          files: bundles/**
+          # 任何一个 glob 没匹配到文件就失败,防止发出缺附件的 Release
+          fail_on_unmatched_files: true
+          # Release 说明由 GitHub 服务端按 commit / PR 自动生成
+          generate_release_notes: true
+          # tag 含 `-`(如 v0.2.0-beta.1)标记为预发布,正式版不带 `-`
+          prerelease: ${{ contains(github.ref_name, '-') }}

@@ -1,0 +1,8 @@
+{
+  // 根配置只是壳,自身不含任何文件,通过 references 把两个环境的配置串起来:
+  // - tsconfig.app.json:浏览器侧 src/**(带 DOM)
+  // - tsconfig.node.json:Node 侧 vite / vitest 配置与 scripts/(带 @types/node)
+  // `vue-tsc -b` 顺着 references 一次检查全部;编辑器也靠它给 vite.config.ts 等文件匹配正确的配置。
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+}

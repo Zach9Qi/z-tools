@@ -1,0 +1,94 @@
+# main 分支质量门禁:push 到 main 与目标为 main 的 PR 触发,前端与 Rust 两条 job 并行。
+# 校验命令:前端 format / lint / typecheck / test / build,后端 fmt / clippy / test。
+# 第三方 action 固定大版本,且选 Node 24 运行时的版本(actions/checkout@v4 仍是 Node 20,托管 runner 于 2026-09-23 移除 Node 20)。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 同一分支的新提交自动取消仍在跑的旧任务,不浪费 runner 时间
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# 门禁只读代码,不写任何仓库内容
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: 前端(format / lint / typecheck / test / build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 安装 bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: 安装依赖(锁定 bun.lock)
+        run: bun install --frozen-lockfile
+
+      - name: 格式检查(Prettier)
+        run: bun run format:check
+
+      - name: Lint(oxlint)
+        run: bun run lint
+
+      - name: 单元测试(Vitest)
+        run: bun run test
+
+      - name: 前端构建(vue-tsc -b 全量类型门禁 + vite build)
+        run: bun run build
+
+  rust:
+    name: Rust(${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 一个平台失败另一个继续跑完,方便一次看到全部问题
+      fail-fast: false
+      # Windows 与 Ubuntu 双平台编译验证,防止改坏跨平台构建
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    defaults:
+      run:
+        # 统一用 bash,避免 Windows 默认 pwsh 与 bash 在参数解析上的差异
+        shell: bash
+        working-directory: src-tauri
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 安装 Linux 系统依赖(webkit2gtk / rsvg 等)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf xdg-utils
+
+      - name: 安装 Rust 工具链(stable,含 rustfmt / clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: 缓存 cargo 产物
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # tauri-build 的 build.rs 会检查 tauri.conf.json5 里的 frontendDist(../dist)是否存在,不存在直接报错;
+      # 门禁只关心 Rust 代码,这里放一个空目录即可通过检查,不必真正跑前端构建
+      - name: 创建空 dist 目录满足 tauri-build 检查
+        # 相对 working-directory(src-tauri)写路径,避免把 Windows 反斜杠绝对路径传给 bash
+        run: mkdir -p ../dist
+
+      - name: 格式检查(cargo fmt)
+        run: cargo fmt --check
+
+      - name: Clippy(警告视为错误)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: 单元测试(cargo test)
+        run: cargo test

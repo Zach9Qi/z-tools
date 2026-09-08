@@ -1,0 +1,34 @@
+﻿{
+    "id":  "fix-frontend-quality-gate",
+    "name":  "fix-frontend-quality-gate",
+    "title":  "修复前端质量门禁",
+    "description":  "补 src/lib/runtime.test.ts 让 bun run test 通过,CI 前端 job 增加 prettier --check",
+    "status":  "in_progress",
+    "dev_type":  null,
+    "scope":  null,
+    "package":  null,
+    "priority":  "P2",
+    "creator":  "chenziqi",
+    "assignee":  "chenziqi",
+    "createdAt":  "2026-09-05",
+    "completedAt":  null,
+    "branch":  "main",
+    "base_branch":  null,
+    "worktree_path":  null,
+    "commit":  "a56d656",
+    "pr_url":  null,
+    "subtasks":  [
+
+                 ],
+    "children":  [
+
+                 ],
+    "parent":  null,
+    "relatedFiles":  [
+
+                     ],
+    "notes":  "",
+    "meta":  {
+
+             }
+}

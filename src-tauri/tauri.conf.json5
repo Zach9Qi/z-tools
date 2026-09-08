@@ -1,0 +1,60 @@
+{
+  // JSON Schema，供编辑器做补全与校验
+  "$schema": "https://schema.tauri.app/config/2",
+  // 应用显示名称（安装包、窗口等会用到）
+  "productName": "tauri-vue-starter",
+  // 应用版本号；与 package.json、Cargo.toml 同值，一律走 scripts/release.ts 修改，不要手改
+  "version": "0.1.0",
+  // 【新项目必改】应用唯一标识（反向域名，打包/系统注册用），不要留 com.example
+  "identifier": "com.example.tauri-vue-starter",
+  // 前后端构建相关配置
+  "build": {
+    // 开发模式启动前执行的命令（启动前端 dev server）
+    "beforeDevCommand": "bun run dev",
+    // 开发模式下加载的前端地址（与 vite.config.ts 的端口保持一致）
+    "devUrl": "http://localhost:1420",
+    // 正式打包前执行的命令（构建前端产物）
+    "beforeBuildCommand": "bun run build",
+    // 打包时嵌入的前端静态资源目录；tauri-build 会检查该目录存在，CI 需先 mkdir
+    "frontendDist": "../dist"
+  },
+  // 应用运行时配置
+  "app": {
+    // 窗口列表
+    "windows": [
+      {
+        // 窗口标识，代码里用这个名字查找窗口（capabilities/default.json 按此 label 授权）
+        "label": "main",
+        // 窗口标题
+        "title": "tauri-vue-starter",
+        // 初始宽度（逻辑像素）
+        "width": 800,
+        // 初始高度（逻辑像素）
+        "height": 600,
+        // 启动时居中显示
+        "center": true
+      }
+    ],
+    // 安全相关配置
+    "security": {
+      // Content Security Policy；null 表示不启用（开发方便，生产建议收紧）。
+      // 官方基线：default-src 'self'; connect-src ipc: http://ipc.localhost
+      "csp": null
+    }
+  },
+  // 安装包/分发相关配置
+  "bundle": {
+    // 是否启用打包
+    "active": true,
+    // 打包目标平台；"all" 表示当前支持的全部目标
+    "targets": "all",
+    // 应用图标路径列表
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/09-08-design-tokens-alignment/prd.md", "reason": "逐条验收标准"}
+{"file": ".trellis/tasks/09-08-design-tokens-alignment/design.md", "reason": "核对令牌取值、类名与实现是否一致"}
+{"file": ".trellis/spec/frontend/styling-guidelines.md", "reason": "检查重写后的规范与 index.css 令牌一一对应、类名在 Tailwind 4 中真实存在"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "门禁命令与可访问性要求"}

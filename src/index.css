@@ -1,0 +1,173 @@
+/* 只扫描 src/ 提取 class,避免 README、.trellis 等无关文件改动触发 CSS HMR */
+@import "tailwindcss" source("../src");
+
+/*
+ * 三层设计令牌:可变性只从 :root 进入,语义层只做映射,组件只消费工具类。
+ * 深浅色靠 light-dark() + html 上的 color-scheme(见基础层);换肤只需覆盖 :root。
+ * 令牌词汇表对齐 shadcn/ui v4 命名(primary / card / popover / destructive / input …),
+ * 新增令牌与 z-index 档位同样遵守「具体值只进 :root」。
+ */
+
+/* —— 第一层:原始层(唯一允许出现具体值的地方) —— */
+:root {
+  /* 颜色:色相只用内置 var(--color-*),透明用 --alpha(),深浅不同用 light-dark(),不写字面色值 */
+
+  /* background: 页面底;深色取 950 给 card / popover 留出「更亮一档」;不用于卡片、弹层 */
+  --background: light-dark(var(--color-white), var(--color-zinc-950));
+  /* foreground: 高对比主文字 */
+  --foreground: light-dark(var(--color-zinc-800), var(--color-zinc-100));
+  /* card: 卡片、面板、侧栏等静态表面,深色比 background 亮一档表达层级;不用于悬浮层 */
+  --card: light-dark(var(--color-white), var(--color-zinc-900));
+  /* card-foreground: 坐在 card 底上的文字,与 bg-card 成对出现 */
+  --card-foreground: var(--foreground);
+  /* popover: dropdown / tooltip / dialog 等悬浮表面,必配 border + shadow-*;不用于页内静态容器 */
+  --popover: light-dark(var(--color-white), var(--color-zinc-900));
+  /* popover-foreground: 坐在 popover 底上的文字,与 bg-popover 成对出现 */
+  --popover-foreground: var(--foreground);
+  /* primary: 主 CTA、选中态强调、链接;每屏不超过一个主 CTA */
+  --primary: light-dark(var(--color-zinc-900), var(--color-zinc-50));
+  /* primary-foreground: 坐在 primary 底上的文字,与 bg-primary 成对出现 */
+  --primary-foreground: light-dark(var(--color-zinc-50), var(--color-zinc-900));
+  /* secondary: 次级实底按钮、标签;不作为 hover 态(hover 用 accent) */
+  --secondary: light-dark(var(--color-zinc-100), var(--color-zinc-800));
+  /* secondary-foreground: 坐在 secondary 底上的文字,与 bg-secondary 成对出现 */
+  --secondary-foreground: light-dark(var(--color-zinc-900), var(--color-zinc-50));
+  /* muted: 静态次级底(徽章、代码片段等非交互底);不用于可点击元素的底 */
+  --muted: light-dark(--alpha(var(--color-zinc-100) / 90%), --alpha(var(--color-zinc-800) / 75%));
+  /* muted-foreground: 低对比文字(提示、占位、说明) */
+  --muted-foreground: light-dark(var(--color-zinc-500), var(--color-zinc-400));
+  /* accent: hover / 选中 / ghost 按钮的叠加底(半透明);不用于主按钮、静态容器 */
+  --accent: light-dark(--alpha(var(--color-zinc-900) / 6%), --alpha(var(--color-white) / 10%));
+  /* accent-foreground: 坐在 accent 底上的文字,与 bg-accent 成对出现 */
+  --accent-foreground: light-dark(var(--color-zinc-900), var(--color-zinc-50));
+  /* destructive: 错误文案、删除按钮、危险边框;不用于非破坏性的警告提示 */
+  --destructive: light-dark(var(--color-red-600), var(--color-red-400));
+  /* destructive-foreground: 坐在 destructive 底上的文字,与 bg-destructive 成对出现 */
+  --destructive-foreground: light-dark(var(--color-white), var(--color-zinc-950));
+  /* border: 分隔线、卡片描边;表单控件描边用 input */
+  --border: light-dark(--alpha(var(--color-zinc-200) / 80%), --alpha(var(--color-zinc-700) / 60%));
+  /* input: 表单控件描边,比 border 更强以便识别可编辑区;不用于非控件 */
+  --input: light-dark(var(--color-zinc-300), --alpha(var(--color-white) / 15%));
+  /* ring: 焦点环、基础层 outline-color 兜底 */
+  --ring: light-dark(var(--color-zinc-400), var(--color-zinc-500));
+
+  /* z-index 档位:Tailwind 4 没有 z-index 命名空间,不走 @theme;组件用 z-(--z-*) 引用,禁止裸数字 / 任意值 */
+
+  /* 下拉、自动补全,依附触发器 */
+  --z-dropdown: 10;
+  /* 吸顶栏、固定工具栏 */
+  --z-sticky: 20;
+  /* 模态遮罩 */
+  --z-overlay: 30;
+  /* 对话框、抽屉 */
+  --z-modal: 40;
+  /* 弹层 / tooltip,可出现在 modal 之上 */
+  --z-popover: 50;
+  /* 全局通知,永远最上 */
+  --z-toast: 60;
+
+  /* 非颜色原始值:圆角基准、根字号、字体族 */
+
+  /* 圆角单一基准;语义层按档位 calc 派生,组件类名不变 */
+  --radius: 0.5rem;
+  /* 根字号入口;改此值后间距 / 字号 / rem 尺寸等比缩放,圆角偏移仍是 px */
+  --font-size-base: 100%;
+  /* 系统 UI 字体栈;语义层映射为 --font-sans */
+  --font-family-sans:
+    system-ui, -apple-system, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+  /* 等宽字体栈;语义层映射为 --font-mono */
+  --font-family-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+/* —— 第二层:语义层(只做映射与派生,零具体颜色值) —— */
+/* 用 inline 让工具类直接输出 var(--background),任意子树覆盖原始变量都能生效 */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* 圆角派生:sm/md/lg/xl/2xl = 基准 -4/-2/0/+4/+8px,对应 4/6/8/12/16px */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --font-sans: var(--font-family-sans);
+  --font-mono: var(--font-family-mono);
+}
+
+/* —— 第三层:基础层(全局行为策略,不写配色) —— */
+@layer base {
+  html {
+    font-size: var(--font-size-base);
+    /* color-scheme 必须与 :root 里的 light-dark() 令牌声明在同一元素上:
+     * 1. light-dark() 只在带 color-scheme 的元素(及其子树)上才会按深浅色取值,放在 html 上可覆盖
+     *    Teleport 到 body 的弹层等所有节点;
+     * 2. 构建时 Lightning CSS 会把 light-dark() polyfill 成依赖 --lightningcss-light/dark 开关变量的
+     *    var() 表达式,而自定义属性里的 var() 在声明它的元素(:root)上求值后才被继承;开关若挂在
+     *    更深的容器上,:root 拿不到它们,所有颜色令牌都会算成非法值。 */
+    color-scheme: light dark;
+    /* Windows WebView2 默认滚动条粗且不随主题;细滚动条 + 令牌着色,轨道透明 */
+    scrollbar-width: thin;
+    scrollbar-color: --alpha(var(--color-muted-foreground) / 40%) transparent;
+  }
+
+  /* 文档级底色 / 文字色 / 字体族挂在 body,只消费语义令牌不写具体值:
+   * 这样内容短于视口、Teleport 到 body 的弹层等脱离布局容器的区域也不会露出 webview 白底 */
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* 桌面应用不需要 overscroll 回弹(回弹时也不会露底,因为底色已挂在 body) */
+    overscroll-behavior: none;
+  }
+
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  * {
+    /* 写 border 不必再带颜色 */
+    border-color: var(--color-border);
+    /* 焦点兜底:组件忘写 focus-visible:ring 时仍有可见轮廓;写了 ring 的组件配 outline-hidden(透明 outline,forced-colors 下仍可见)避免双环 */
+    outline-color: --alpha(var(--color-ring) / 50%);
+  }
+
+  /* 选区跟随主色,不用浏览器默认蓝 */
+  ::selection {
+    background-color: --alpha(var(--color-primary) / 20%);
+  }
+
+  /* 系统开启「减少动态效果」时停用动画与过渡。
+   * 这是本仓库唯一允许 !important 的地方:必须压过所有工具类,不能依赖层叠顺序 */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

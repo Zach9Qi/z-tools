@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/styling-guidelines.md", "reason": "被替换的现版样式规范,实现时需保留其仍有效的约束(深浅色机制、禁止项)"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范索引、质量检查清单与决策记录,需同步新增条目"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "可访问性章节的焦点写法需更新为新范式"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件内样式与图标约定,需补组件变体章节引用"}
+{"file": ".trellis/spec/guides/project-conventions.md", "reason": "中文注释、提交等全项目约定"}
+{"file": ".trellis/tasks/09-08-design-tokens-alignment/design.md", "reason": "令牌取值表、base 层增量、交互范式、组件改动点的唯一权威来源"}
+{"file": ".trellis/tasks/09-08-design-tokens-alignment/implement.md", "reason": "分步执行清单与验证命令"}

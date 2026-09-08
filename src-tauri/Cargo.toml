@@ -1,0 +1,32 @@
+[package]
+name = "tauri-vue-starter"
+version = "0.1.0"
+description = "Tauri 2 + Vue 3 脚手架"
+# 【新项目必改】authors 是脚手架占位，改成你的名字或邮箱
+authors = ["you"]
+license = "MIT"
+edition = "2024"
+# edition 2024 自 1.85 起稳定;低于此版本 cargo 会直接拒绝编译
+rust-version = "1.85"
+
+# 其余可用字段见 https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# `_lib` 后缀看似多余，但必须保留：lib 名需与 bin 名区分开，
+# 否则在 Windows 上会冲突，见 https://github.com/rust-lang/cargo/issues/8519
+name = "tauri_vue_starter_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = ["config-json5"] }
+
+[dependencies]
+# config-json5：让 tauri.conf.json5 可带注释，每个配置项都要写中文说明
+tauri = { version = "2", features = ["config-json5"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 统一错误类型 AppError 的派生宏
+thiserror = "2.0.20"
+# 日志门面 + Tauri 日志插件：业务代码用 log 宏，禁止 println! 调试
+log = "0.4.34"
+tauri-plugin-log = "2.9.1"

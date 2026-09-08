@@ -1,0 +1,40 @@
+{
+  "name": "tauri-vue-starter",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Tauri 2 + Vue 3 脚手架",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "format": "prettier --write src/ scripts/",
+    "format:check": "prettier --check src/ scripts/",
+    "lint": "oxlint",
+    "test": "vitest run",
+    "release": "bun run scripts/release.ts",
+    "version:check": "bun run scripts/version.ts check",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "tailwindcss": "^4.3.3",
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2",
+    "@types/node": "^26.4.1",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "oxlint": "^1.81.0",
+    "prettier": "^3.9.6",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "typescript": "~6.0.3",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11",
+    "vue-tsc": "^3.3.11",
+    "unplugin-icons": "^23.0.1",
+    "@iconify-json/lucide": "^1.2.129"
+  }
+}
