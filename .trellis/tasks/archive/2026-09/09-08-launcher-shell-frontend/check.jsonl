@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "五条门禁命令、测试覆盖要求、console 规则、可访问性检查项"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "「质量检查」清单:无 invoke/listen 泄漏、无 any、无原始色/dark:/裸 z-、ref 注释"}
+{"file": ".trellis/spec/frontend/styling-guidelines.md", "reason": "逐条核对组件类名:语义令牌、焦点 ring、accent 用法、4px 网格、禁止项"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "核对新增文件目录/命名与依赖方向(lib 不 import 组件/store;import/no-cycle)"}
+{"file": ".trellis/spec/frontend/ipc-guidelines.md", "reason": "核对 @tauri-apps/api/* 只出现在 src/lib/,所有封装有浏览器降级分支"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "核对没有模块级 ref/reactive 单例、没有 provide/inject 传业务状态"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 types/tool.ts 契约 ↔ registry ↔ 面板 ↔ 演示工具 四处一致"}

@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范索引与开发前检查清单、关键决策记录(props 解构默认值、SFC 块顺序、命令名字面量)"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新文件放哪:components 子目录规则、composables/、stores/、types/、lib/ 纯函数 + 同目录测试、依赖方向"}
+{"file": ".trellis/spec/frontend/styling-guidelines.md", "reason": "三层令牌只用语义工具类、焦点 outline-hidden + ring、accent 做 hover/选中、静态表面 bg-card border、4px 网格、z-(--z-*)、拖拽区 select-none"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "SFC 形态、defineProps 泛型 + 解构默认值、defineModel、图标 aria-hidden、每个 ref 一行中文注释"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "useXxx 返回对象、副作用在同函数内 onUnmounted 清理、纯逻辑下沉 lib/ 并测试"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "跨不相邻组件共享状态用 Pinia setup store;禁模块级单例与 provide/inject;快捷键登记表据此进 store"}
+{"file": ".trellis/spec/frontend/ipc-guidelines.md", "reason": ".vue/store 不 import @tauri-apps/api/*;浏览器预览降级要求;lib/window.ts 沿用 lib/api.ts 的唯一入口 + 降级模式"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "禁 any / 非空断言 / enum;类型放 src/types/ 还是就近声明的判断"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "门禁命令、测试文件同目录、中文测试名、console 只允许 error/warn、可访问性要求"}
+{"file": ".trellis/spec/guides/project-conventions.md", "reason": "注释/文案中文、标识符英文、提交信息格式"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "抽组件 vs composable vs lib 纯函数的判断,避免重复实现"}
