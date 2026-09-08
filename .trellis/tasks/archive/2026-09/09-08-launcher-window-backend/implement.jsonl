@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端规范索引、开发前检查清单、关键决策(xxx.rs+xxx/ 不用 mod.rs、Result<T,AppError>、事件常量、log 门面)"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "领域层 launcher.rs / 平台层 launcher/windows.rs / tray.rs / commands/launcher.rs 的放置与新增命令固定动作"}
+{"file": ".trellis/spec/backend/command-guidelines.md", "reason": "hide_launcher 命令签名(无 await 不 async、不可失败返回 ())、注册"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "领域层吞错只 log::warn、setup 内不 panic 返回 Err、禁 unwrap/expect"}
+{"file": ".trellis/spec/backend/state-events-async.md", "reason": "事件 pub const domain://action 放 emit 点模块、emit 失败只 warn、payload 约定"}
+{"file": ".trellis/spec/backend/config-and-permissions.md", "reason": "tauri.conf.json5 每项中文注释、capabilities 最小权限、平台依赖放 [target.'cfg(windows)']、#[cfg(desktop)] setup_desktop、平台代码拆文件"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "cargo 三条门禁、内联测试、//! 与 /// 文档、use 分组、unsafe/allow 需注释"}
+{"file": ".trellis/spec/guides/ipc-contract.md", "reason": "新增命令与事件的两侧变更清单(api.ts / events.ts / useTauriEvent)"}
+{"file": ".trellis/spec/frontend/ipc-guidelines.md", "reason": "invoke 只在 lib/api.ts;@tauri-apps/api/event 只在事件 composable;events.ts 形态;降级要求"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "useTauriEvent 示意实现(非 Tauri 不订阅、卸载竞态、onUnmounted 清理)"}
+{"file": ".trellis/spec/frontend/styling-guidelines.md", "reason": "§3 color-scheme 必须留在 html 的原因;body 底色改动需与之协调"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "lib/events.ts、composables/ 的放置与依赖方向"}
+{"file": ".trellis/spec/guides/project-conventions.md", "reason": "注释/文案中文、提交格式、门禁"}

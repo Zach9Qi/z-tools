@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "门禁、反模式速查、提交前自检清单"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端质量检查清单逐条核对"}
+{"file": ".trellis/spec/backend/command-guidelines.md", "reason": "核对 hide_launcher 签名与注册"}
+{"file": ".trellis/spec/backend/state-events-async.md", "reason": "核对事件常量命名、emit 失败处理、无 static APP_HANDLE"}
+{"file": ".trellis/spec/backend/config-and-permissions.md", "reason": "核对配置项注释、权限最小化、平台依赖与 cfg 门控"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对无 unwrap/expect/panic、setup 返回 Err"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端质量检查清单(invoke/listen 泄漏、清理)"}
+{"file": ".trellis/spec/frontend/ipc-guidelines.md", "reason": "核对 invoke / event import 位置与降级分支"}
+{"file": ".trellis/spec/guides/ipc-contract.md", "reason": "核对命令名、事件名两侧一致"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "命令注册 ↔ api.ts、事件常量 ↔ events.ts 的跨层一致性"}
