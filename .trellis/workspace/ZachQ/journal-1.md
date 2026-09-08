@@ -28,3 +28,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: 启动器窗口管理(Rust 侧)
+<!-- trellis-session: v=2 fp=887f38d99bba8652 -->
+
+**Date**: 2026-09-08
+**Task**: 启动器窗口管理(Rust 侧)
+**Branch**: `feat/launcher-window-backend`
+
+### Summary
+
+Rust 侧启动器窗口管理:透明无边框置顶隐藏窗口、默认唤出键全局快捷键 toggle(单一常量 + get_toggle_shortcut 下发前端,预留可配置)、按工作区定位(anchor_position 纯函数 + 测试)、失焦隐藏(托盘豁免)、托盘(左键 toggle、右键只弹菜单)、Windows SetWindowSubclass 拦 SC_KEYMENU、CloseRequested 拦为隐藏;前端 hide 改走 hide_launcher 命令、launcher://open 事件 + useTauriEvent 聚焦全选、body 透明、搜索框去焦点环(显式例外);删除 greet 脚手架命令;spec 回写 backend/frontend/guides 16 处
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4983b50` | feat(backend): 启动器窗口管理(透明置顶/全局快捷键/托盘/失焦隐藏) |
+| `7465f82` | docs(spec): 回写窗口管理约定、事件与快捷键单一来源,移除 greet 样板引用 |
+
+### Status
+
+[OK] **Completed**
