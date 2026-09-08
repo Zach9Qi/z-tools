@@ -9,7 +9,7 @@
 | 对象 | 语言 | 证据 |
 |------|------|------|
 | 交流、PR / issue 描述、任务文档(`.trellis/`)| **中文** | 本文件、`README.md` |
-| 代码注释(`//`、`///`、`//!`、`/** */`、`<!-- -->`)| **中文** | `src-tauri/src/error.rs`、`src/components/HelloWorld.vue`、`vite.config.ts` |
+| 代码注释(`//`、`///`、`//!`、`/** */`、`<!-- -->`)| **中文** | `src-tauri/src/error.rs`、`src/components/launcher/LauncherPanel.vue`、`vite.config.ts` |
 | 面向用户的文案(错误信息、UI 文本、日志)| **中文** | `AppError::InvalidInput("名字不能为空")`、`.expect("启动应用失败")` |
 | commit 描述 | **中文**(type / scope 用英文关键字) | 见下节 |
 | 配置文件注释(`tauri.conf.json5`、`Cargo.toml`、`.oxlintrc.json`、workflow yml)| **中文** | `src-tauri/tauri.conf.json5`、`.github/workflows/ci.yml` |

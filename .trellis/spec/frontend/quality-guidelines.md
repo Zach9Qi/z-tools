@@ -26,14 +26,15 @@ bun run build         # vue-tsc -b(全量类型检查)+ vite build
 
 ## 3. 注释与可读性
 
-- 注释中文,写「为什么」:每个 `ref` 一行 `/** */`(代表什么、何时变、与谁互斥);每个非显然的配置项一行说明(参考 `vite.config.ts`、`HelloWorld.vue`)。
-- 函数级 JSDoc 说明降级行为与失败方式(`src/lib/api.ts`)。
+- 注释中文,写「为什么」:每个 `ref` 一行 `/** */`(代表什么、何时变、与谁互斥);每个非显然的配置项一行说明(参考 `vite.config.ts`、`src/components/launcher/LauncherPanel.vue`)。
+- 函数级 JSDoc 说明降级行为与失败方式(`src/lib/api.ts`、`src/lib/window.ts`)。
+- 文件头一段注释说明这个模块在整体里的位置与为何这样划分(`src/stores/keymap.ts`、`src/composables/useKeymap.ts`、`src/tools/icons.ts`),让读者不用先读完代码再猜职责。
 - 不写复述代码的注释(`// 设置 loading 为 true`)。
 - 经验参考值(非硬标准):文件超过约 200 行或组件同时管理 ≥5 个互相关联的 `ref`,考虑拆 composable / 子组件。
 
 ## 4. 日志
 
-- 只允许 `console.error` / `console.warn`,且带中文前缀:`console.error("问候失败:", error)`。
+- 只允许 `console.error` / `console.warn`,且带中文前缀:`console.error("启动工具失败:", error)`。
 - 不留 `console.log` 调试语句(本仓库未加 lint 规则强制,靠评审,但要求相同)。
 
 ## 5. 可访问性
@@ -47,7 +48,7 @@ bun run build         # vue-tsc -b(全量类型检查)+ vite build
 ## 6. 依赖
 
 - 新增依赖前先看现有栈能否解决;新依赖要在 PR 描述里写用途。
-- 图标集、构建工具放 `devDependencies`;只有运行时需要的进 `dependencies`(当前仅 `@tauri-apps/api`、`vue`、`tailwindcss`)。
+- 图标集、构建工具放 `devDependencies`;只有运行时需要的进 `dependencies`(当前仅 `@tauri-apps/api`、`vue`、`pinia`、`tailwindcss`)。
 - 锁文件只有 `bun.lock`;不要生成 `package-lock.json` / `pnpm-lock.yaml`。
 
 ## 7. 禁止

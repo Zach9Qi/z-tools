@@ -59,6 +59,9 @@ grep -rn "settings://" src/ src-tauri/src/
 | 事件名与 payload 类型 | `src/lib/events.ts` | 领域模块内的事件常量 |
 | Rust 结构体镜像类型 | `src/types/<domain>.ts` | 领域模块 |
 | 可复用的响应式逻辑 | `src/composables/useXxx.ts` | —— |
+| 窗口控制(隐藏 / 改尺寸) | `src/lib/window.ts`(唯一 `@tauri-apps/api/window` 入口) | ——(本阶段不建 Rust 命令) |
+| 快捷键登记 / 页脚提示 | `src/stores/keymap.ts` + `useKeymap` | —— |
+| 工具契约与登记 | `src/types/tool.ts`、`src/tools/registry.ts`、`src/tools/icons.ts` | —— |
 | 错误类型与文案 | 由后端序列化字符串直接展示 | `src-tauri/src/error.rs`(`AppError`) |
 
 ---
@@ -67,9 +70,9 @@ grep -rn "settings://" src/ src-tauri/src/
 
 ### 模式一:复制粘贴函数
 
-**反面**:把 `HelloWorld.vue` 里「调用 → 置 loading → catch 记错误 → finally 复位」那段 `submit` 逻辑原样抄进第二个组件。
+**反面**:把 `LauncherPanel.vue` 里 `activate()` 那段「调用 → catch 记日志 → 写入 `error` ref」的逻辑原样抄进第二个组件;或者工具页里自己再挂一个 `window.addEventListener("keydown")` 而不用 `useKeymap`。
 
-**正面**:第二个组件出现时,抽成 `src/composables/useAsyncAction.ts` 之类的 composable,把 `loading` / `errorMessage` / 调用封装进去,两个组件都引用它。
+**正面**:第二个组件出现时,抽成 `src/composables/useAsyncAction.ts` 之类的 composable,把 `loading` / `error` / 调用封装进去,两个组件都引用它;快捷键一律 `useKeymap` 登记,监听只在 `useKeymapListener` 一处。
 
 ### 模式二:相似组件
 
@@ -122,7 +125,7 @@ useTauriEvent(EVENTS.SETTINGS_UPDATED, (payload) => {
 
 **反面**:Rust 命令已经对 `name.trim().is_empty()` 返回 `AppError::InvalidInput`,前端又在 `api.ts` 里复制一份同样的判空并抛出另一句中文。
 
-**正面**:校验以 Rust 命令层为唯一权威(前端是不可信输入源);前端只做 UI 层面的「禁用按钮」等交互约束(如 `HelloWorld.vue` 的 `canSubmit`),不重复产出错误文案。
+**正面**:校验以 Rust 命令层为唯一权威(前端是不可信输入源);前端只做 UI 层面的「禁用按钮」等交互约束,不重复产出错误文案。
 
 ---
 

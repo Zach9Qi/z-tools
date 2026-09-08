@@ -154,11 +154,19 @@ git commit -m "chore: initialize project from tauri-vue-starter template"
 │   ├── release.ts              # 一键发版脚本：安全检查 → 同步版本 → commit → tag → push
 │   └── version.ts              # 跨文件版本号读写、一致性校验与 Cargo.lock 刷新逻辑
 ├── src/                        # 前端应用源码 (Vue 3 + TS)
-│   ├── components/             # 业务组件库 (HelloWorld.vue 等)
+│   ├── components/
+│   │   ├── common/             # 通用无业务组件 (KeyboardKey.vue)
+│   │   └── launcher/           # 启动器领域组件：面板壳、搜索栏、结果网格、磁贴、页脚
+│   ├── composables/            # useKeymap / useRowNavigation / useAutoHeight
+│   ├── stores/                 # Pinia store（快捷键登记表 keymap.ts）
 │   ├── lib/
 │   │   ├── api.ts              # 统一 IPC 调用入口（附带错误处理与降级响应）
-│   │   └── runtime.ts          # 运行时环境探测（判断是否处于 Tauri WebView）
-│   ├── App.vue                 # 根组件（承担系统深浅色与全局布局策略）
+│   │   ├── runtime.ts          # 运行时环境探测（判断是否处于 Tauri WebView）
+│   │   ├── window.ts           # 窗口控制封装（隐藏 / 改尺寸；唯一 @tauri-apps/api/window 入口）
+│   │   └── launcher/           # 启动器纯函数（搜索分区、方向键导航、键位标签）+ 单测
+│   ├── types/                  # 跨模块共享类型（tool.ts：工具注册契约）
+│   ├── tools/                  # 工具模块：registry.ts 登记表、icons.ts 图标映射、demo/ 示例工具
+│   ├── App.vue                 # 根组件（只管全局布局，挂载 LauncherPanel）
 │   ├── index.css               # Tailwind CSS v4 样式入口与三层设计令牌配置
 │   ├── main.ts                 # 前端应用挂载入口
 │   └── vite-env.d.ts           # Vite 环境变量与 unplugin-icons 类型声明

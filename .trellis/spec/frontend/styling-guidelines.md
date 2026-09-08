@@ -1,6 +1,6 @@
 # 样式规范(Tailwind CSS 4 + 三层设计令牌)
 
-> 唯一的全局样式文件是 `src/index.css`;组件只写工具类。本仓库选 Tailwind 4(CSS-first 配置、`light-dark()` 原生深浅色),令牌词汇表对齐 shadcn/ui v4 命名以便未来零成本接入 shadcn-vue / Reka UI 组件,实现机制保留 `light-dark()`。以下全部基于本仓库真实实现(`src/index.css`、`src/components/HelloWorld.vue`)。
+> 唯一的全局样式文件是 `src/index.css`;组件只写工具类。本仓库选 Tailwind 4(CSS-first 配置、`light-dark()` 原生深浅色),令牌词汇表对齐 shadcn/ui v4 命名以便未来零成本接入 shadcn-vue / Reka UI 组件,实现机制保留 `light-dark()`。以下全部基于本仓库真实实现(`src/index.css`、`src/components/launcher/*.vue`)。
 
 ---
 
@@ -84,6 +84,7 @@
 | disabled | `disabled:pointer-events-none disabled:opacity-50` | 同左 | 同左 |
 | 过渡 | `transition-colors`(默认 150ms / ease) | 同左 | 同左 |
 
+- **选中态(键盘 / hover 共用)**:`bg-accent text-accent-foreground`,与 ghost hover 同一组类,让方向键选中与鼠标悬停看起来是同一件事;选中由 prop 驱动 `:class="selected && 'bg-accent text-accent-foreground'"`,hover 由 `hover:` 变体驱动,两者叠加不冲突。例 `ToolTile.vue`。
 - **hover 用实底变色**(`hover:bg-primary/90`),不用 `hover:opacity-*`:后者会让文字、图标一起变淡。
 - **disabled 用 `pointer-events-none`**,不用 `cursor-not-allowed`:前者顺带挡掉 hover 变色;`cursor-not-allowed` 在 `pointer-events-none` 下本就不会显示。
 - **焦点用半透明 3px 环**(`ring-3 ring-ring/50`,Tailwind 4 中 `ring-3` 是合法动态值),深色下比 2px 实色环更柔和;表单控件同时把描边换成 `focus-visible:border-ring`。
@@ -98,7 +99,7 @@
 | 表面 | 令牌 | 描边 / 阴影 | 例子 |
 |---|---|---|---|
 | 页面底 | `background`(由 `body` 消费,组件不写) | — | `App.vue` `<main>` |
-| 静态表面 | `bg-card text-card-foreground` | `border`(+ 可选 `shadow-sm`) | `HelloWorld.vue` `<section>` |
+| 静态表面 | `bg-card text-card-foreground` | `border`(+ 可选 `shadow-sm`) | `LauncherPanel.vue` 面板根 `<section>` |
 | 悬浮表面 | `bg-popover text-popover-foreground` | `border shadow-md` | dropdown、tooltip、dialog |
 | 次级静态底 | `bg-muted` | — | 徽章、`<code>` 片段 |
 
@@ -108,16 +109,16 @@
 
 ## 6. 排版与密度
 
-- 字号只用 Tailwind 默认档位 `text-xs` … `text-2xl`;正文 `text-sm`,标题 `font-semibold`(`HelloWorld.vue` 的 `h1` 为 `text-2xl font-semibold`),不写 `text-[13px]`。
+- 字号只用 Tailwind 默认档位 `text-xs` … `text-2xl`;正文 `text-sm`,标题 `font-semibold`(`ToolSection.vue` 的分区标题 `text-xs font-semibold tracking-wide`),不写 `text-[13px]` 也不自造 `text-2xs`。需要定行高时用字号 / 行高简写(`text-xs/4`,`ToolTile.vue` 的两行定高标题)。
 - `leading-*` / `tracking-*` 只用默认档位,不写任意值。
-- 间距走 4px 网格:`gap-2 / 4 / 6`、`p-2 / 4 / 6 / 8`。一次性控件用内边距定高(输入框 `px-3 py-2`、按钮 `px-4 py-2`,与 `HelloWorld.vue` 一致);带 `size` prop 的组件用固定 `h-*`(见 §11)保证同一行内对齐。
+- 间距走 4px 网格:`gap-2 / 4 / 6`、`p-2 / 4 / 6 / 8`;参考其他项目的 `px-5.5` / `gap-3.5` / `size-5.5` 一律取整到默认档位。一次性控件用内边距定高(输入框 `px-3 py-2`、按钮 `px-4 py-2`);带 `size` prop 的组件与需要与邻居对齐的 chrome 元素用固定 `h-*`(搜索栏 `h-16`、页脚 `h-10`、键帽 `h-5`)。
 - 尺寸用 `size-*` / `h-*` / `w-*` 等 rem 工具类;不写 `px` 任意值。
 - 低对比说明文字用 `text-sm text-muted-foreground`;等宽片段用 `font-mono`。
 
 ## 7. 动效
 
 - 颜色过渡统一 `transition-colors`,用默认 `duration` / `ease`,不单独写 `duration-*` / `ease-*` 除非有明确理由。
-- 加载态用 `animate-spin`(`HelloWorld.vue` 的 loader 图标)。
+- 加载态用 `animate-spin`;按下反馈用 `active:scale-95`(`ToolTile.vue`),不写 `scale-96` 等非默认档位。
 - **reduced-motion 由基础层全局处理**:`@media (prefers-reduced-motion: reduce)` 下把所有 `animation-duration` / `transition-duration` 压到 `0.01ms`、`animation-iteration-count: 1`、`scroll-behavior: auto`(`!important`,这是本仓库唯一允许 `!important` 的地方);组件**不需要**再写 `motion-reduce:` 变体。
 - 不引入动效库;需要复杂动画时用 `<style scoped>` + `@keyframes`,并写注释说明为何工具类表达不了。
 
@@ -153,7 +154,8 @@
 - **选区**:基础层 `::selection { background-color: --alpha(var(--color-primary) / 20%) }`,组件不再单独设。
 - **overscroll**:`body { overscroll-behavior: none }`,桌面应用不需要回弹。
 - **自定义标题栏 / 拖拽区**:承载拖拽的元素加 `data-tauri-drag-region`,并给该 chrome 区域加 `select-none` 防止拖动时选中文字;拖拽区内的按钮不继承拖拽(Tauri 只对带属性的元素本身生效)。
-- **不在 `body` 全局 `user-select: none`**:内容区文字必须可选中复制;`select-none` 只加在标题栏、工具栏等 chrome 区。
+- **不在 `body` 全局 `user-select: none`**:内容区文字必须可选中复制;`select-none` 只加在标题栏、工具栏等 chrome 区(`HomeSearchBar.vue` / `ToolSearchBar.vue` 的搜索栏外框)。
+- **透明底输入框也要 `outline-hidden` + ring**:搜索栏这类由外层承担表面的 `bg-transparent` 输入框不写 `border-input`,但焦点环不能省;给它一个小于外框的固定高度与 `rounded-md`,让环不贴外框上下边(`SearchInput.vue`:`h-10 rounded-md bg-transparent outline-hidden focus-visible:ring-3 focus-visible:ring-ring/50`)。
 
 ## 11. 组件变体写法
 
@@ -183,7 +185,7 @@ const { variant = "default", size = "md" } = defineProps<{
 
 - 工具类顺序由 `prettier-plugin-tailwindcss` 排序(`.prettierrc` 已配置 `tailwindStylesheet: ./src/index.css`),提交前跑 `bun run format`,不手动排。
 - 尺寸用 `size-*` / `gap-*` / `p-*` 等 rem 工具类;不写 `px` 任意值。
-- 交互态按 §4 表格写:实底按钮 `transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50`,焦点 `outline-hidden focus-visible:ring-3 focus-visible:ring-ring/50`,与 `HelloWorld.vue` 一致。
+- 交互态按 §4 表格写:实底按钮 `transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50`,焦点 `outline-hidden focus-visible:ring-3 focus-visible:ring-ring/50`(`ToolTile.vue`、`ToolSearchBar.vue` 的徽章按钮)。
 - 需要复用的一组类名:优先抽组件(带 `variant` / `size` props 的按钮组件,见 §11),其次才是 `@utility`;`@apply` 仅在组件无法抽取时使用(Tailwind 官方文档建议优先组件化而非 `@apply`)。
 - `<style scoped>` 仅在工具类确实表达不了(复杂动画、第三方组件深层选择器 `:deep()`)时使用,并写注释说明为何不能用工具类。
 

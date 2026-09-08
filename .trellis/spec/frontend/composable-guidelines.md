@@ -1,6 +1,12 @@
 # Composable 规范
 
-> Vue 官方术语是 composable(组合式函数),目录固定 `src/composables/`,不用 `hooks/`。目前仓库尚无 composable,以下是引入时的约定。
+> Vue 官方术语是 composable(组合式函数),目录固定 `src/composables/`,不用 `hooks/`。现有三个:
+>
+> | 文件 | 职责 |
+> |---|---|
+> | `useKeymap.ts` | `useKeymap(bindings)`:把一份快捷键绑定登记进 `stores/keymap`,挂载登记 / 卸载注销 / 变化重新登记;`useKeymapListener()`:挂**唯一**的 `window keydown` 监听并转给 `store.dispatch`,只由 `LauncherPanel` 调一次 |
+> | `useRowNavigation.ts` | 磁贴网格的 `selectedIndex` + 方向键 / Enter 登记;下标计算全部交给 `lib/launcher/navigation.ts` 纯函数 |
+> | `useAutoHeight.ts` | `ResizeObserver` 观察面板根,高度变化时调 `lib/window.resizeLauncherToContent`;卸载 `disconnect` |
 
 ---
 
@@ -56,7 +62,8 @@ export function useTauriEvent<K extends keyof EventPayloads>(
 
 - composable 可以调用 `src/lib/api.ts` 和 store;不反向被 `lib/` 依赖。
 - 一个 composable 只做一件事:「监听事件」和「拉取列表」分开写,不做大而全的 `useApp()`。
-- 与 UI 库无关:不 import 组件、不操作 DOM(需要 DOM 的用 `ref<HTMLElement>` 由调用方传入)。
+- 与 UI 库无关:不 import 组件、不操作 DOM(需要 DOM 的用 `ref<HTMLElement>` 由调用方传入,如 `useAutoHeight(rootRef)`)。
+- **唯一的全局键盘监听放在 `useKeymapListener`**,其他 composable(`useKeymap` / `useRowNavigation` / 工具页自己的)只登记绑定、不挂 `addEventListener`。登记与监听拆开,是为了避免每个登记方各挂一个监听导致同一次 keydown 被多处处理、`isComposing` / Tab 拦截等公共规则散落多处。
 
 ## 5. 测试
 

@@ -83,7 +83,7 @@ pub fn greet(name: &str) -> Result<String, AppError>  // 形参: name(snake_case
 ```
 
 `Err(AppError::InvalidInput("名字不能为空"))` 经 `error.rs` 的 `Serialize` 实现变为字符串 `"参数错误: 名字不能为空"`,
-前端 `catch (error)` 后 `String(error)` 即可展示(`HelloWorld.vue` 就是这么做的)。
+前端 `catch (error)` 后 `String(error)` 即可展示(`LauncherPanel.vue` 的 `activate()` 对 launch 型工具的 `run()` 失败就是这么做的:`console.error` + 写入 `error` ref)。
 
 ---
 
@@ -169,7 +169,7 @@ pub fn greet(name: &str) -> Result<String, AppError>  // 形参: name(snake_case
 
 - [ ] 评审称「用户输入可能是恶意的」→ 核实数据源:是前端传来的(确实不可信),还是 Rust 侧自己构造的 payload / 打包进应用的配置(可信)?
 - [ ] 评审标「缺少校验」→ 校验是否已在 Rust 命令层完成?在 TS 侧再加一份是本指南反对的做法
-- [ ] 评审说「行为发生变化」→ 先读代码注释,本仓库注释写明了大量有意为之的设计(例如降级分支、`canSubmit` 双重兜底)
+- [ ] 评审说「行为发生变化」→ 先读代码注释,本仓库注释写明了大量有意为之的设计(例如 `lib/window.ts` 的降级分支、`LauncherPanel.vue` 中 `v-if` 重建搜索栏以触发自动聚焦)
 - [ ] 评审在测试里发现「bug」→ 把被测功能在脑中删掉,测试是否仍能通过?能通过才是空洞测试,否则评审读错了
 
 常见误报模式:

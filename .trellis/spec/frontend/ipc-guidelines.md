@@ -6,6 +6,7 @@
 
 ## 1. invoke 只能出现在 `src/lib/api.ts`(或拆分后的 `src/lib/api/**/*.ts`)
 
+- 同理,`@tauri-apps/api/window` **只允许在 `src/lib/window.ts`** import(`hideLauncher()` / `resizeLauncherToContent()`)。它与 `api.ts` 遵守同一套规则:非 Tauri 运行时降级为 no-op(浏览器改不了标签页尺寸也隐藏不了窗口),失败时 `console.error("中文前缀:", error)` 且**不抛**——窗口尺寸没同步、隐藏失败都只是视觉问题,不应让 UI 进入错误态。组件 / composable 只 `import { hideLauncher } from "@/lib/window"`。
 - 组件、composable、store 都不直接 `import { invoke }`;统一 `import { greet } from "@/lib/api"`。(README「禁止组件直接调用 invoke」)
 - 每个命令一个导出函数,**函数名 = Rust 命令名的 camelCase**:`get_settings` → `getSettings()`。
 - 命令名以字符串字面量写在封装函数里,不建常量表、不用枚举、不引入 tauri-specta(命令名只在封装函数内出现一次,常量表没有收益)。
@@ -31,8 +32,8 @@ export function greet(name: string): Promise<string> {
 
 ## 3. 错误契约
 
-- Rust 侧 `AppError` 序列化为**中文字符串**(`src-tauri/src/error.rs` 的 `impl Serialize` → `serialize_str(self.to_string())`)。因此 `invoke` reject 的值就是可展示文案,调用方 `catch (error)` 后用 `String(error)` 直接绑到模板(`HelloWorld.vue` 的 `errorMessage`)。
-- 组件层处理错误的固定套路:`loading` 置位 → `try / catch / finally` → `console.error("中文前缀:", error)` + 写入 `errorMessage`;不让 Promise 悬空 reject。
+- Rust 侧 `AppError` 序列化为**中文字符串**(`src-tauri/src/error.rs` 的 `impl Serialize` → `serialize_str(self.to_string())`)。因此 `invoke` reject 的值就是可展示文案,调用方 `catch (error)` 后用 `String(error)` 直接绑到模板。
+- 组件层处理错误的固定套路:`try / catch` → `console.error("中文前缀:", error)` + 写入 `error` ref 供模板展示;有加载态时再加 `loading` 置位 / `finally` 复位;不让 Promise 悬空 reject。现存样板见 `src/components/launcher/LauncherPanel.vue` 的 `activate()`。
 - 前端**不要**再给错误文案拼动作前缀(「保存失败:」),Rust 文案已经是完整句子(两侧都拼前缀会重复)。
 - 未来若需要按错误类型分支(如区分「参数错误」与「系统错误」做不同 UI),改为结构化 `{ kind, message }` 契约;本仓库尚未需要,**不要**提前引入。
 
@@ -73,7 +74,7 @@ export interface EventPayloads {
 
 ## 7. 禁止
 
-- `.vue` / store 里 `import` `@tauri-apps/api/*`;composable 里 `import` `@tauri-apps/api/core`(`@tauri-apps/api/event` 仅限事件 composable)。
+- `.vue` / store 里 `import` `@tauri-apps/api/*`;composable 里 `import` `@tauri-apps/api/core` / `@tauri-apps/api/window`(`@tauri-apps/api/event` 仅限事件 composable);`src/lib/window.ts` 之外 `import` `@tauri-apps/api/window`。
 - `invoke("cmd")` 不写泛型。
 - 参数 key 用 snake_case(Rust 侧不使用 `rename_all = "snake_case"`)。
 - 直接读 `window.__TAURI_INTERNALS__`。

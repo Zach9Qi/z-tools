@@ -1,6 +1,6 @@
 # 状态管理
 
-> 目前仓库没有全局状态,也未安装 Pinia;所有状态都在组件内(`HelloWorld.vue`)。本文件规定「状态放哪」与「引入 Pinia 后怎么写」。
+> Pinia 已安装(`dependencies`,`main.ts` 中 `use(createPinia())`)。现有 store 只有 `src/stores/keymap.ts`(快捷键登记表);启动器的视图状态仍在组件内(`LauncherPanel.vue`)。本文件规定「状态放哪」与「store 怎么写」。
 
 ---
 
@@ -8,15 +8,16 @@
 
 | 状态种类 | 放哪 | 例子 |
 |---|---|---|
-| 只有一个组件用的 UI 状态 | 组件内 `ref` / `computed` | `HelloWorld.vue` 的 `name` / `loading` / `errorMessage` |
-| 父子之间传递 | props 向下、emits 向上;两层以内不要引 store | — |
-| 多个不相邻组件共享、或需要跨路由保留 | Pinia store(`src/stores/`) | 用户设置、登录态 |
+| 只有一个组件用的 UI 状态 | 组件内 `ref` / `computed` | `LauncherPanel.vue` 的 `homeQuery` / `toolQuery` / `activeModule` |
+| 父子之间传递 | props 向下、emits 向上;两层以内不要引 store | `LauncherPanel` → `ResultsPanel` 的 `sections` / `activate` |
+| 多个不相邻组件共享、或需要跨路由保留 | Pinia store(`src/stores/`) | 快捷键登记表(`stores/keymap.ts`)、用户设置 |
+| 跨不相邻组件的「登记 / 消费」 | store 持有登记表;登记方通过 composable 在 `onMounted` / `onUnmounted` 增删**自己那一份**(按句柄),消费方用 `storeToRefs` 读派生值 | 工具页 / 导航 composable 用 `useKeymap` 登记,页脚读 `hints` |
 | 来自 Rust 的「真相」(设置、列表) | Rust 是唯一数据源;前端 store 只做镜像 + 缓存,变更走 `api.ts` 命令,再由事件或重新拉取刷新 | Rust emit `settings://updated` → 前端 store 同步 |
-| 派生值 | 永远 `computed`,不存副本 | `canSubmit` |
+| 派生值 | 永远 `computed`,不存副本 | `LauncherPanel.vue` 的 `view`(由 `activeModule` 派生)、`stores/keymap.ts` 的 `hints`(由 `bindings` 派生) |
 
 ## 2. 引入 Pinia 时的写法
 
-一律用 **setup store**,导出名统一 `useXxxStore`:
+一律用 **setup store**,导出名统一 `useXxxStore`。下面是「镜像 Rust 数据」类 store 的示意;真实样板见 `src/stores/keymap.ts`(纯前端状态,不走 IPC):
 
 ```ts
 // src/stores/settings.ts
@@ -43,6 +44,7 @@ export const useSettingsStore = defineStore("settings", () => {
 - 业务动作写成 store 的函数(action),组件只调 action、读 state,不在组件里拼多个 store 的读写。
 - 组件里解构 store 用 `storeToRefs()`,否则丢响应性。
 - 一个 store 内需要别的 store 时,在 setup 函数体内调用另一个 `useXxxStore()`,不要在模块顶层调用。
+- 「登记表」类 store(如 `keymap`)的模式:`register()` 返回句柄、`unregister(handle)` 整份删除,派生值(`hints`)用 `computed`;不让登记方直接改 `Map`。生命周期绑定不写在 store 里(store 没有组件上下文),而在 composable(`useKeymap`)里用 `onMounted` / `onUnmounted` 完成。
 - IPC 调用仍然走 `@/lib/api`,store 不 `import { invoke }`。
 
 ## 3. 持久化

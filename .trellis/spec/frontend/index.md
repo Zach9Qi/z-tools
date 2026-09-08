@@ -17,20 +17,22 @@
 | [type-safety.md](./type-safety.md) | tsconfig 基线、类型放哪、IPC 边界类型映射 | 定义或修改类型 |
 | [styling-guidelines.md](./styling-guidelines.md) | 三层设计令牌(shadcn v4 命名)、深浅色、交互 / 焦点范式、表面层级、z-index 档位、桌面端约定、组件变体写法 | 写样式、加颜色、写按钮 / 弹层 / 表单控件 |
 | [quality-guidelines.md](./quality-guidelines.md) | 门禁命令、测试、注释、日志、可访问性、依赖 | 提交前 |
+| [tool-module-guidelines.md](./tool-module-guidelines.md) | 工具注册契约(`ToolItem` / `ToolModule`)、`src/tools/<id>/` 目录、registry / icons 登记、view 页面契约、禁止项 | 新增或修改一个工具 |
 
 ## 开发前检查清单
 
 1. 读 `directory-structure.md`,确认新文件的目录与命名;不要新建同义目录。
-2. 涉及 IPC → 读 `ipc-guidelines.md` + `../guides/ipc-contract.md`,确认 `invoke` 只在 `src/lib/api.ts`(或 `src/lib/api/**/*.ts`),并有浏览器降级分支。
+2. 涉及 IPC → 读 `ipc-guidelines.md` + `../guides/ipc-contract.md`,确认 `invoke` 只在 `src/lib/api.ts`(或 `src/lib/api/**/*.ts`)、`@tauri-apps/api/window` 只在 `src/lib/window.ts`,并有浏览器降级分支。
 3. 涉及样式 → 读 `styling-guidelines.md`,只用语义令牌工具类。
 4. 涉及共享状态 → 读 `state-management.md`,先判断是否真的需要 store。
-5. 参照 `src/components/HelloWorld.vue` 与 `src/lib/api.ts` 的注释密度和写法,保持一致。
+5. 参照 `src/components/launcher/LauncherPanel.vue`(状态与异步错误套路)、`ToolTile.vue`(props / emits / 样式)、`src/lib/api.ts` / `src/lib/window.ts`(降级与 JSDoc)的注释密度和写法,保持一致。
 6. 所有注释、文案、日志前缀用中文;标识符用英文。
+7. 新增工具 → 读 `tool-module-guidelines.md`,只碰 `src/tools/<id>/`、`tools/registry.ts`、`tools/icons.ts` 三处。
 
 ## 质量检查
 
 - [ ] `bun run format && bun run format:check && bun run lint && bun run test && bun run build` 全部通过。
-- [ ] `.vue` / composable / store 中没有 `import { invoke }` / `import { listen }`(事件 composable 除外)。
+- [ ] `.vue` / composable / store 中没有 `import { invoke }` / `import { listen }`(事件 composable 除外);`src/lib/window.ts` 之外没有 `@tauri-apps/api/window`。
 - [ ] 每个 `invoke<T>()` 有泛型;每个 `api.ts` 函数有非 Tauri 分支。
 - [ ] 没有 `any`、`!` 非空断言、TS `enum`、`console.log`。
 - [ ] 组件内没有字面色值、`bg-zinc-*`、`dark:` 变体。
@@ -55,4 +57,10 @@
 | 事件名 | `domain://action` | 领域前缀避免事件名冲突,便于按领域 grep |
 | 类型共享 | 手写 TS 镜像 | 不引入 specta / ts-rs,少一层构建链依赖;镜像文件头注明 Rust 路径便于同步 |
 | 前端持久化 | 暂不规定 | 业界无统一做法,本项目暂不规定 |
+| 快捷键登记表 | Pinia store(`stores/keymap.ts`)+ `useKeymap` 登记 / `useKeymapListener` 单点监听 | 登记方(工具页、导航 composable)与消费方(页脚)不相邻,属跨组件共享;规范禁模块级单例与 `provide/inject` 传业务状态。监听只挂一处,公共规则(`isComposing` / Tab 拦截 / 组合键放过)不散落 |
+| 启动器视图状态 | `LauncherPanel` 本地 ref + props / emits | 消费者都是直接子组件,两层以内不引 store |
+| 窗口 API 落点 | `lib/window.ts` 直调 `@tauri-apps/api/window`,浏览器 no-op,失败只 `console.error` | 与 `lib/api.ts` 同层同规则(唯一入口 + 降级);隐藏 / 改尺寸不值得为此建 Rust 命令 |
+| 工具图标解析 | `tools/icons.ts` 手工 `Record<string, Component>`,未登记回退 `puzzle` | `unplugin-icons` 只能静态 import,无法按运行时字符串加载;图标缺失是视觉问题不应让网格渲染失败 |
+| 主页分区 | 暂只有「全部工具」 | 无使用历史,「最近使用 / 已固定」是空壳;`SectionId` 联合类型保留扩展余地 |
+| 工具与启动器的耦合点 | 仅 `types/tool.ts` 契约 + `tools/registry.ts` 登记 | 启动器不认识任何具体工具,工具不 import 启动器内部组件;删掉 `tools/demo/` 只需改 registry 一行 |
 | 页面目录名 | 暂不规定 | `views/` 与 `pages/` 业界无统一做法,引入路由时再定 |
