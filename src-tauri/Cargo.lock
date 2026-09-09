@@ -4230,26 +4230,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-vue-starter"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "blake3",
- "image",
- "log",
- "serde",
- "serde_json",
- "sqlx",
- "tauri",
- "tauri-build",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-log",
- "thiserror 2.0.20",
- "tokio",
- "windows",
-]
-
-[[package]]
 name = "tauri-winres"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5626,6 +5606,26 @@ dependencies = [
  "quote",
  "syn 2.0.119",
  "synstructure",
+]
+
+[[package]]
+name = "z-tools"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "blake3",
+ "image",
+ "log",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-log",
+ "thiserror 2.0.20",
+ "tokio",
+ "windows",
 ]
 
 [[package]]

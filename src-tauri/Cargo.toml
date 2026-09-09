@@ -1,9 +1,8 @@
 [package]
-name = "tauri-vue-starter"
+name = "z-tools"
 version = "0.1.0"
-description = "Tauri 2 + Vue 3 脚手架"
-# 【新项目必改】authors 是脚手架占位，改成你的名字或邮箱
-authors = ["you"]
+description = "z-tools：托盘常驻的桌面效率工具（启动器 / 剪贴板历史）"
+authors = ["zachq"]
 license = "MIT"
 edition = "2024"
 # edition 2024 自 1.85 起稳定;低于此版本 cargo 会直接拒绝编译
@@ -14,7 +13,7 @@ rust-version = "1.85"
 [lib]
 # `_lib` 后缀看似多余，但必须保留：lib 名需与 bin 名区分开，
 # 否则在 Windows 上会冲突，见 https://github.com/rust-lang/cargo/issues/8519
-name = "tauri_vue_starter_lib"
+name = "z_tools_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

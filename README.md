@@ -1,304 +1,210 @@
 <div align="center">
 
-# ⚡ Tauri 2 + Vue 3 Starter
+# ⚡ z-tools
 
-开箱即用的现代化跨平台桌面应用开发脚手架与 GitHub 模板仓库。  
-集成 **Tauri 2** + **Vue 3** + **TypeScript** + **Tailwind CSS v4**，预设严苛的工程化规范、双向降级浏览器预览、多平台 CI 质量门禁与一键自动化矩阵打包发版流水线。
+常驻托盘、键盘优先的桌面效率启动器。  
+一键唤出面板，把日常小工具收进同一个入口——首个内置工具是**剪贴板历史**。
 
 [![Tauri 2](https://img.shields.io/badge/Tauri-v2-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![Vue 3](https://img.shields.io/badge/Vue-v3-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Tailwind CSS v4](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Bun](https://img.shields.io/badge/Bun-v1.x-FBF0DF?style=flat-square&logo=bun&logoColor=black)](https://bun.sh/)
 [![Rust 2024](https://img.shields.io/badge/Rust-Edition_2024_(MSRV_1.85)-DEA584?style=flat-square&logo=rust&logoColor=black)](https://www.rust-lang.org/)
-[![GitHub Actions CI](https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Bun](https://img.shields.io/badge/Bun-v1.x-FBF0DF?style=flat-square&logo=bun&logoColor=black)](https://bun.sh/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-[✨ 使用此模板新建项目](#-基于模板新建项目) · [🚀 快速开始](#-快速开始) · [📋 定制清单](#-新项目必改清单) · [📐 架构规范](#-工程规范与架构设计) · [📦 自动化发版](#-自动化发版与-cicd)
+[✨ 功能](#-功能) · [📥 安装](#-安装) · [🚀 开发](#-开发) · [📐 架构](#-架构与工程规范) · [📦 发版](#-发版与-cicd)
 
 </div>
 
 ---
 
-## 🌟 核心特性 (Features)
+## 🌟 功能
 
-不同于基础的 Hello World，本脚手架定位为**直接面向生产环境的工程化起步模板**，为你抹平跨平台桌面端开发初期的大量重复配置：
+### 启动器面板
 
-- ⚡ **极致现代化前端栈**：Vue 3.5 (`<script setup>`) + Vite 6 + TypeScript 严格模式，基于 **Bun** 驱动包管理与脚本执行，冷启动与构建瞬时完成。
-- 🎨 **Tailwind CSS v4 原生设计令牌**：采用全新的 CSS-first 架构，内置三层设计令牌体系（原始层 → 语义层 → 工具类），利用 `light-dark()` 原生 CSS 函数实现**跟随系统的深浅色模式无缝切换**，杜绝页面闪烁。
-- 🌐 **双向降级与极速纯浏览器调试**：支持 `bun run dev` 纯网页预览。内置 `runtime.ts` 运行时环境感知与 IPC 自动降级 Mock，**调 UI 无需编译 Rust 后端**；需要联调系统底层能力时再执行 `bun run tauri dev`。
-- 🦀 **健壮解耦的 Rust 后端架构**：
-  - `lib.rs`（应用状态与插件装配）与 `main.rs`（系统入口/隐藏控制台）规范分离，便于单元测试与集成测试复用；
-  - 领域化命令拆分（`src-tauri/src/commands/`），命令层遵循**薄代理**与边界输入校验；
-  - 基于 `thiserror` 的强类型全局统一错误枚举 `AppError`，序列化直出可读中文，前端捕获即可直接展示；
-  - 结构化日志集成（`tauri-plugin-log` + `log` 门面宏），Debug 细粒度追踪，Release 静默安全。
-- 🧩 **按需零运行时图标**：集成 `unplugin-icons` 与 Lucide 图标集，编译期按需提取并内联为纯 SVG 组件，零网络开销、尺寸随 `size-*` 缩放、颜色随 `currentColor` 自适应。
-- 🛡️ **严格的多层代码质量门禁**：
-  - 前端：Prettier 格式检查（`--check` 已进 CI，含 Tailwind 类名自动排序插件）+ Oxlint（毫秒级极速静态分析）+ `vue-tsc -b` 全量类型检查 + Vitest 单元测试；
-  - 后端：`cargo fmt` + `cargo clippy --all-targets -- -D warnings`（零警告容忍）+ `cargo test`。
-- 🚀 **一条命令自动化发版 (`scripts/release.ts`)**：内置发版助手，自动执行工作区洁净度检查、分支一致性校验、tag 防重、三处版本号同步（`package.json` / `Cargo.toml` / `tauri.conf.json5`）并自动刷新 `Cargo.lock`。
-- 🤖 **工业级 GitHub Actions 流水线**：
-  - **CI 门禁 (`ci.yml`)**：PR 与 Push 自动触发，前端全量验证与 Rust 双平台（Windows + Ubuntu 24.04）并行编译检查；
-  - **多平台矩阵打包 (`release.yml`)**：推送 tag 自动触发跨平台矩阵构建，并行产出 **Windows** (`.msi` / `-setup.exe`)、**macOS Apple Silicon** (`.dmg`)、**macOS Intel** (`.dmg` 交叉编译)、**Linux** (`.deb` / `.rpm` / `.AppImage`)，一次性原子创建附带全套安装包的 GitHub Release。
+- **托盘常驻，不占任务栏**：启动即隐藏到系统托盘，托盘左键开合面板，右键菜单「打开启动器 / 退出」。
+- **全局快捷键唤出**：默认 <kbd>Alt</kbd> + <kbd>Enter</kbd>，在任意前台应用下呼出 / 收起面板（定义于 `src-tauri/src/launcher.rs` 的 `DEFAULT_TOGGLE_SHORTCUT`）。
+- **无边框透明面板**：宽 800px，高度随内容自动伸缩；每次唤出按当前显示器工作区重新定位（水平居中、顶边在 1/4 处），始终置顶。
+- **失焦即隐藏**：点到别处自动收起；<kbd>Alt</kbd>+<kbd>F4</kbd> / 关闭请求只隐藏不退出；Windows 下拦截 <kbd>Alt</kbd> 弹出的系统菜单。
+- **工具搜索**：主页输入关键词（中英文 / 拼音缩写）过滤工具，键盘导航进入；页脚实时显示当前页可用键位，无需记忆。
 
----
+### 剪贴板历史（首个内置工具）
 
-## 🧰 技术栈概览
+- **自动记录**：监听系统剪贴板变化，捕获 **文本**（≤ 1 MiB）、**图片**（≤ 20 MiB，落盘 PNG 原图 + 256px 缩略图）、**文件列表**（路径）。
+- **去重与保留**：blake3 内容哈希去重，重复复制只刷新时间；最多保留 **500** 条非收藏记录，超出自动淘汰最旧项（含图片文件）；收藏项不受限制。
+- **一键粘贴回去**：选中条目确认或点击 → 写回剪贴板 → 切回唤出前的前台窗口 → 模拟 <kbd>Ctrl</kbd>+<kbd>V</kbd>；目标窗口不可达时退化为仅复制。
+- **分类与检索**：全部 / 文本 / 图片 / 文件四个标签页；文本按内容、文件按文件名模糊搜索；收藏过滤；滚动到底自动加载更多。
+- **管理**：收藏 / 取消收藏、删除（同时清理图片文件）、展开查看完整内容。
 
-| 模块 | 技术选型 | 版本 / 说明 |
+> [!NOTE]
+> 剪贴板**监听与模拟粘贴**目前只在 **Windows** 上实现；macOS / Linux 可编译运行启动器，但剪贴板工具不会录入历史，粘贴命令返回「不支持」。
+
+## 📥 安装
+
+从 [GitHub Releases](https://github.com/Zach9Qi/z-tools/releases) 下载对应平台安装包：
+
+| 平台 | 安装包 | 说明 |
 |---|---|---|
-| **桌面运行时** | [Tauri 2](https://v2.tauri.app/) | 现代化轻量跨平台运行时，内存占用低、体积小 |
-| **系统后端** | [Rust](https://www.rust-lang.org/) | Edition 2024 (MSRV 1.85)，`thiserror` 统一错误，`tauri-plugin-log` 日志 |
-| **前端框架** | [Vue 3](https://vuejs.org/) | Composition API + `<script setup>` + TypeScript |
-| **样式与主题** | [Tailwind CSS v4](https://tailwindcss.com/) | `@tailwindcss/vite`，三层设计令牌 + `light-dark()` 自动主题 |
-| **构建与打包** | [Vite](https://vite.dev/) + [vue-tsc](https://github.com/vuejs/language-tools) | 极速热重载 + 全量类型门禁构建 |
-| **图标方案** | [unplugin-icons](https://github.com/unplugin/unplugin-icons) + Lucide | 编译期按需内联 SVG 组件 (`~icons/lucide/*`) |
-| **测试框架** | [Vitest](https://vitest.dev/) + `cargo test` | 前端组件/纯逻辑单测 + Rust 领域命令单测 |
-| **代码质量** | [Oxlint](https://oxc.rs/) + Prettier + Clippy | 毫秒级 Lint，样式属性自动重排，Rust 静态诊断 |
-| **包管理器** | [Bun](https://bun.sh/) | 锁定 `bun.lock`，极速脚本执行与依赖安装 |
-| **持续集成** | [GitHub Actions](https://github.com/features/actions) | 全自动多系统 CI 门禁 + 四平台矩阵打包发版 |
+| **Windows x64** | `.msi` / `-setup.exe` | 完整功能（推荐） |
+| **macOS** | `.dmg`（Apple Silicon / Intel） | 仅启动器壳，剪贴板工具不可用 |
+| **Linux x64** | `.deb` / `.rpm` / `.AppImage` | 仅启动器壳，剪贴板工具不可用 |
 
----
+> [!IMPORTANT]
+> 安装包未做代码签名：Windows 首次运行会被 SmartScreen 拦截，选择「仍要运行」即可；macOS 需在「系统设置 → 隐私与安全性」中手动放行。
 
-## 🚀 快速开始
+### 数据与日志目录
+
+所有落盘数据统一放在应用本地数据目录（Windows 为 `%LOCALAPPDATA%\com.zachq.z-tools\`），不写 Roaming：
+
+```text
+com.zachq.z-tools/
+├── clipboard/
+│   ├── history.db      # 剪贴板历史（SQLite）
+│   └── images/         # 图片原图与缩略图（<hash>.png / <hash>.thumb.png）
+├── logs/               # 运行日志（开发 Debug / 发布 Info）
+└── EBWebView/          # WebView2 缓存
+```
+
+**完全卸载 / 重置**：卸载程序后删除上述目录即可。
+
+## 🚀 开发
 
 ### 前置准备
 
-在本地运行或构建前，请确保安装以下基础环境：
+1. [Bun](https://bun.sh/) ≥ 1.x —— 依赖管理与脚本执行。
+2. [Rust](https://rustup.rs/) —— 进入仓库后 `rust-toolchain.toml` 自动切换到 stable（≥ 1.85）并补齐 `rustfmt` / `clippy`。
+3. 系统依赖 —— 参见 Tauri 官方 [Prerequisites](https://v2.tauri.app/start/prerequisites/)（Windows 需 C++ 构建工具 + WebView2，Linux 需 WebKitGTK）。
 
-1. **[Bun](https://bun.sh/)**：推荐使用 Bun 进行依赖管理与脚本执行。
-2. **[Rust](https://rustup.rs/)**：进入本仓库时，`rust-toolchain.toml` 会自动切换至 stable（>= 1.85）并补齐 `rustfmt` 与 `clippy`。
-3. **系统依赖**：请参阅 Tauri 官方文档 [Prerequisites](https://v2.tauri.app/start/prerequisites/) 配置目标系统的 C++ 编译工具链与 WebView2 (Windows) / WebKitGTK (Linux) 依赖。
-
-### 常用运行命令
+### 常用指令
 
 ```bash
-# 1. 安装项目依赖（使用 bun.lock 锁定依赖版本）
-bun install
-
-# 2. 启动桌面端完整调试（首次启动会自动编译 Rust 后端，请耐心等待）
-bun run tauri dev
-
-# 3. 仅浏览器预览前端（无需编译 Rust，IPC 自动 mock 降级，极速调试 UI 与样式）
-bun run dev
+bun install            # 安装依赖
+bun run tauri dev      # 桌面端完整调试（首次编译 Rust 较慢）
+bun run dev            # 仅浏览器预览前端，IPC 自动 mock，免编译 Rust
 ```
+
+| 指令 | 作用 |
+|---|---|
+| `bun run build` | `vue-tsc -b` 全量类型检查 + Vite 打包 |
+| `bun run format` / `format:check` | Prettier 格式化 / 检查（含 Tailwind 类名排序） |
+| `bun run lint` | Oxlint 静态诊断 |
+| `bun run test` | Vitest 前端单测 |
+| `bun run version:check` | 校验 `package.json` / `Cargo.toml` / `tauri.conf.json5` 三处版本一致 |
+| `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` | Rust 侧质量门禁（在 `src-tauri/` 下执行） |
 
 > [!TIP]
-> **关于双向降级**：通过 `bun run dev` 启动纯浏览器模式时，页面会调用 `src/lib/runtime.ts` 感知到不在 WebView 中：`src/lib/api/` 的命令封装降级为 no-op 或默认值（如唤出键回退为默认键位），`src/lib/window.ts` 的尺寸同步与 `useTauriEvent` 的事件订阅直接跳过。这允许前端工程师在没有安装 Rust 环境的设备上快速完成界面开发；窗口显隐、托盘、全局快捷键等原生能力需 `bun run tauri dev` 联调。
-
----
-
-## 📋 基于模板新建项目
-
-本仓库是标准的 **GitHub Template**。请按照以下步骤将其转化为你的专属生产项目：
-
-### 第一步：创建新仓库
-
-点击本仓库右上角的 **`Use this template`** 按钮（或选择 **`Create a new repository`**），填写你的新仓库名称并克隆到本地。
-
-### 第二步：新项目必改清单
-
-为防止占位符遗留影响打包与上线，请依次替换以下文件中的标识（代码中均包含 `【新项目必改】` 提示）：
-
-| 目标文件 | 需替换字段 | 示例 / 说明 |
-|---|---|---|
-| `package.json` | `name` | 改为你的项目小写连字符名称，如 `my-app` |
-| `src-tauri/Cargo.toml` | `[package]` 段的 `name`、`description`、`authors` | 如 `name = "my-app"`，`authors = ["Your Name <you@example.com>"]` |
-| `src-tauri/Cargo.toml` | `[lib]` 段的 `name` | crate 标识符（下划线风格），如 `my_app_lib` |
-| `src-tauri/src/main.rs` | 引入的 lib crate 名称 | 与上一步保持一致，如 `my_app_lib::run()` |
-| `src-tauri/tauri.conf.json5` | `productName` | 应用展示名称，如 `"My App"` |
-| `src-tauri/tauri.conf.json5` | `identifier` | **必须修改**！应用唯一标识（反向域名），如 `"com.company.myapp"`，切勿留 `com.example` |
-| `src-tauri/tauri.conf.json5` | `app.windows[0].title` | 窗口默认标题，如 `"My App"` |
-| `index.html` | `<title>` | 浏览器标签页标题 |
-| `src-tauri/icons/` | 应用全套图标 | 见下方一键生成图标说明 |
-
-### 第三步：生成应用图标
-
-准备一张 `1024x1024` 分辨率的 PNG 图标（例如 `app-icon.png`），运行 Tauri 内置工具即可自动生成全平台图标集：
-
-```bash
-bun run tauri icon path/to/app-icon.png
-```
-
-生成的 `32x32.png` 同时可复制到 `public/favicon.png` 作为网页预览图标。
-
-### 第四步：刷新锁文件并提交
-
-修改 package 和 crate 名称后，必须同步更新 lockfile：
-
-```bash
-# 刷新 bun.lock 与 Cargo.lock
-bun install && (cd src-tauri && cargo update --workspace --offline)
-
-# 验证代码检查与构建
-bun run format && bun run lint && bun run build
-
-# 提交初始化代码
-git add -A
-git commit -m "chore: initialize project from tauri-vue-starter template"
-```
-
----
+> **浏览器预览模式**：`bun run dev` 下 `src/lib/runtime.ts` 检测到不在 Tauri WebView 中，`src/lib/api/` 的命令封装会降级为 no-op 或假数据（剪贴板列表带「(浏览器预览)」标记），窗口尺寸同步与事件订阅直接跳过。适合无 Rust 环境下调 UI；托盘、全局快捷键、剪贴板监听等原生能力需 `bun run tauri dev` 联调。
 
 ## 📂 项目结构
 
 ```text
 .
-├── .github/
-│   └── workflows/
-│       ├── ci.yml              # 持续集成：前端 Lint/测试/构建 + Rust 双系统门禁
-│       └── release.yml         # 自动化发版：tag 触发 Windows/macOS/Linux 四平台矩阵打包
-├── .vscode/                    # 编辑器推荐扩展与工作区配置 (Volar, Tailwind, rust-analyzer)
-├── public/                     # 静态资源 (favicon 等)
+├── .github/workflows/
+│   ├── ci.yml                    # CI 门禁：前端 Lint/测试/构建 + Rust（Windows / Ubuntu）
+│   └── release.yml               # tag 触发四平台矩阵打包并发布 GitHub Release
 ├── scripts/
-│   ├── release.ts              # 一键发版脚本：安全检查 → 同步版本 → commit → tag → push
-│   └── version.ts              # 跨文件版本号读写、一致性校验与 Cargo.lock 刷新逻辑
-├── src/                        # 前端应用源码 (Vue 3 + TS)
+│   ├── release.ts                # 一键发版：安全检查 → 同步版本 → commit → tag → push
+│   └── version.ts                # 三处版本号读写、一致性校验、Cargo.lock 刷新
+├── src/                          # 前端（Vue 3 + TS）
 │   ├── components/
-│   │   ├── common/             # 通用无业务组件 (KeyboardKey.vue)
-│   │   └── launcher/           # 启动器领域组件：面板壳、搜索栏、结果网格、磁贴、页脚
-│   ├── composables/            # useKeymap / useRowNavigation / useAutoHeight / useTauriEvent（唯一 @tauri-apps/api/event 入口）
-│   ├── stores/                 # Pinia store（快捷键登记表 keymap.ts）
+│   │   ├── common/               # 通用组件（KeyboardKey）
+│   │   └── launcher/             # 启动器壳：面板、搜索栏、结果网格、磁贴、页脚
+│   ├── composables/              # useKeymap / useRowNavigation / useAutoHeight / useTauriEvent
+│   ├── stores/keymap.ts          # Pinia：当前页快捷键登记表（页脚提示来源）
 │   ├── lib/
-│   │   ├── api.ts              # 统一 IPC 调用入口（hideLauncher / getToggleShortcut；附带浏览器降级）
-│   │   ├── events.ts           # Rust → 前端事件名常量与 payload 类型表（与 launcher.rs 一一对应）
-│   │   ├── runtime.ts          # 运行时环境探测（判断是否处于 Tauri WebView）
-│   │   ├── window.ts           # 窗口尺寸同步（只做 setSize；唯一 @tauri-apps/api/window 入口；显示 / 隐藏由 Rust 控制）
-│   │   └── launcher/           # 启动器纯函数（搜索分区、方向键导航、键位标签、快捷键解析）+ 单测
-│   ├── types/                  # 跨模块共享类型（tool.ts：工具注册契约）
-│   ├── tools/                  # 工具模块：registry.ts 登记表、icons.ts 图标映射、demo/ 示例工具
-│   ├── App.vue                 # 根组件（只管全局布局，挂载 LauncherPanel）
-│   ├── index.css               # Tailwind CSS v4 样式入口与三层设计令牌配置
-│   ├── main.ts                 # 前端应用挂载入口
-│   └── vite-env.d.ts           # Vite 环境变量与 unplugin-icons 类型声明
-├── src-tauri/                  # Rust 桌面端源码
-│   ├── capabilities/           # Tauri 2 窗口与插件能力权限配置 (default.json：core:default + allow-set-size)
-│   ├── icons/                  # 多平台应用图标资源
+│   │   ├── api/                  # 唯一 IPC 入口（launcher.ts / clipboard.ts），带浏览器降级
+│   │   ├── events.ts             # Rust → 前端事件名与 payload 类型（与 Rust 侧一一对应）
+│   │   ├── runtime.ts            # 是否运行在 Tauri WebView
+│   │   ├── window.ts             # 窗口尺寸同步（唯一 @tauri-apps/api/window 入口）
+│   │   └── launcher/             # 纯函数：搜索分区、方向键导航、键位标签 + 单测
+│   ├── tools/
+│   │   ├── registry.ts           # 工具登记表（新增工具在此注册）
+│   │   ├── icons.ts              # 工具图标映射
+│   │   └── clipboard/            # 剪贴板历史工具：页面、行 / 详情 / 标签组件、数据 composable
+│   ├── types/                    # 跨模块类型（tool.ts 工具契约、clipboard.ts）
+│   ├── App.vue · main.ts · index.css
+├── src-tauri/                    # Rust 后端
+│   ├── capabilities/default.json # 窗口能力：core:default + allow-set-size
+│   ├── migrations/               # sqlx 迁移脚本（编译期内嵌，校验和锁定）
 │   ├── src/
-│   │   ├── commands/           # 按领域模块划分的 Tauri 命令实现 (launcher.rs：hide_launcher / get_toggle_shortcut)
-│   │   ├── commands.rs         # 命令模块索引
-│   │   ├── launcher.rs         # 启动器窗口领域逻辑：显示 / 隐藏 / 定位 / 失焦策略 / 事件常量 / 默认唤出键
-│   │   ├── launcher/windows.rs # Windows 平台钩子：拦截 Alt 弹出的无边框窗口系统菜单
-│   │   ├── tray.rs             # 系统托盘：左键开合面板、右键菜单（打开启动器 / 退出）
-│   │   ├── error.rs            # 全局统一 AppError 枚举与面向前端的用户友好中文序列化
-│   │   ├── lib.rs              # 运行时装配：Builder 初始化、插件注册、setup_desktop（快捷键 / 托盘 / 窗口事件）与命令挂载
-│   │   └── main.rs             # 可执行文件入口：静默启动、控制台隐藏与 lib::run 调用
-│   ├── build.rs                # Tauri 构建脚本
-│   ├── Cargo.toml              # Rust 项目清单与依赖管理
-│   └── tauri.conf.json5        # Tauri 2 运行时配置文件（支持丰富注释的 JSON5）
-├── rust-toolchain.toml         # 锁定 Rust 编译工具链版本与组件
-├── .oxlintrc.json              # Oxlint 静态分析规则配置
-├── .prettierrc                 # Prettier 格式化配置（含 Tailwind 属性重排）
-├── package.json                # 项目依赖清单与 NPM 运行指令
-├── tsconfig.json               # TypeScript 复合工程配置
-├── vite.config.ts              # Vite 构建与开发服务器配置
-└── vitest.config.ts            # Vitest 独立测试环境配置
+│   │   ├── lib.rs                # 装配：插件、setup_desktop（快捷键 / 托盘 / 窗口事件 / 剪贴板监听）、命令挂载
+│   │   ├── main.rs               # 可执行入口（Windows 发布版隐藏控制台）
+│   │   ├── launcher.rs           # 面板显示 / 隐藏 / 定位 / 失焦策略 / 默认唤出键
+│   │   ├── launcher/windows.rs   # Windows：拦截 Alt 系统菜单
+│   │   ├── tray.rs               # 托盘图标与菜单
+│   │   ├── clipboard.rs          # 剪贴板领域：类型、限额、监听装配、粘贴回写
+│   │   ├── clipboard/store.rs    # SQLite 存储层（sqlx，去重 / 淘汰 / 分页）
+│   │   ├── clipboard/backend.rs  # arboard 跨平台读写
+│   │   ├── clipboard/windows.rs  # Windows：WM_CLIPBOARDUPDATE 监听、前台窗口切换、SendInput
+│   │   ├── commands/             # 薄命令层：launcher.rs / clipboard.rs
+│   │   └── error.rs              # 统一 AppError，序列化为中文提示
+│   ├── Cargo.toml
+│   └── tauri.conf.json5          # Tauri 配置（JSON5，逐项中文注释）
+└── rust-toolchain.toml · package.json · vite.config.ts · vitest.config.ts · .oxlintrc.json · .prettierrc
 ```
 
----
+## 📐 架构与工程规范
 
-## 📐 工程规范与架构设计
+### 前后端通信分层
 
-### 1. 前端通信分层 (IPC Architecture)
+- **组件禁止直接 `invoke`**：IPC 统一收敛在 `src/lib/api/<domain>.ts`，由 `src/lib/api/index.ts` 汇出。
+- **Tauri API 三个入口**：`@tauri-apps/api/core` 只在 `lib/api/**`；`@tauri-apps/api/window` 只在 `lib/window.ts`（仅 setSize）；`@tauri-apps/api/event` 只在 `composables/useTauriEvent.ts`。窗口显示 / 隐藏由 Rust 控制，前端隐藏走 `hideLauncher()` 命令。
+- **错误直出**：可失败命令返回 `Result<T, AppError>`，前端捕获到的 `error` 已是可读中文字符串，直接展示。
 
-- **禁止组件直接调用 `invoke`**：所有前后端 IPC 通信必须收敛在 `src/lib/api/<domain>.ts` 中(由 `src/lib/api/index.ts` 汇出)。
-- **运行时环境降级**：`api.ts` 借助 `runtime.ts` 的 `isTauriRuntime()` 检测是否存在 `__TAURI_INTERNALS__`。在浏览器开发环境中自动走降级分支，保证页面可用，防止调用崩溃。
-- **类型一致性**：可失败的 Rust 命令返回 `Result<T, AppError>`，前端捕获的 `error` 即为格式化好的中文字符串，直接绑定在视图提示中即可。
-- **Tauri API 三个入口**：`@tauri-apps/api/core` 只在 `lib/api/**`，`@tauri-apps/api/window` 只在 `lib/window.ts`（仅尺寸同步），`@tauri-apps/api/event` 只在 `composables/useTauriEvent.ts`；窗口显示 / 隐藏由 Rust 侧控制，前端隐藏走 `hideLauncher()` 命令。
+### 工具扩展契约
 
-### 2. Tailwind CSS v4 三层设计令牌
+每个工具是 `src/tools/<name>/` 下一个自包含模块，实现 `src/types/tool.ts` 的契约（id、名称、关键词、图标、页面组件），在 `src/tools/registry.ts` 注册即可出现在主页搜索中。工具页通过 `useKeymap` 登记快捷键，页脚提示自动同步；需要后端能力时在 `src-tauri/src/commands/<name>.rs` 加薄命令并在 `lib.rs` 挂载。
 
-项目使用全新的 Tailwind CSS v4 配置，在 `src/index.css` 实现了优雅的三层令牌抽象：
+### Rust 后端
 
-1. **原始层 (`:root`)**：全项目唯一允许出现具体色值和尺寸的地方。颜色使用 `light-dark()` 绑定系统的深浅色模式。
-2. **语义层 (`@theme inline`)**：将原始变量映射为语义变量（如 `--color-background`、`--color-foreground`、`--color-accent`）。
-3. **消费层 (Vue 组件)**：组件直接书写工具类（如 `bg-background`、`text-muted-foreground`、`bg-accent`），换肤或调节品牌色只需修改 `:root`。
+- **薄命令**：`commands/` 只做参数校验与转发，业务逻辑在领域模块（`launcher.rs` / `clipboard.rs`）。
+- **平台代码隔离**：Windows 专属实现放在 `<domain>/windows.rs` 并以 `#[cfg(windows)]` 编译；非 Windows 平台不写假实现，缺失能力明确返回 `AppError::Unsupported`。
+- **持久化约定**：只用 `app_local_data_dir()`，不用 Roaming；只用运行时 `sqlx::query*`，不用 `query!` 宏（避免编译期依赖数据库）。
+- **日志**：`log::*` 门面宏 + `tauri-plugin-log`，禁止 `println!`。
 
-### 3. Rust 后端薄命令与错误分层
+### Tailwind CSS v4 三层令牌
 
-- **薄命令 (Thin Commands)**：`src-tauri/src/commands/` 下的命令只负责不可信参数校验与服务转发，业务逻辑解耦到独立函数或内部 crate。
-- **统一错误 (`AppError`)**：使用 `thiserror` 派生标准错误枚举，并统一实现 `serde::Serialize` 输出字符串。前端无需理解 Rust 底层错误码，直接消费展示文本。
-- **日志门面**：统一使用 `log::info!`、`log::debug!` 宏，严禁使用 `println!` 打印调试信息。开发构建自动开启 Debug 级输出，Release 构建自动收缩至 Info 级。
+`src/index.css`：原始层 `:root`（唯一允许写具体色值处，`light-dark()` 跟随系统深浅色）→ 语义层 `@theme inline`（`--color-background`、`--color-accent` …）→ 组件直接用 `bg-background` / `text-muted-foreground` 等工具类；不写 `dark:` 变体。
 
----
+## 📦 发版与 CI/CD
 
-## 🛠️ 常用开发指令速查
-
-| 指令 | 作用 | 适用场景 |
-|---|---|---|
-| `bun run dev` | 启动浏览器预览前端 | 界面、组件、样式极速微调（免编译 Rust） |
-| `bun run tauri dev` | 启动桌面端完整调试 | 联调原生能力、窗口、IPC、插件 |
-| `bun run build` | 全量类型检查 + 前端产物打包 | 本地构建测试或 CI 门禁检查 |
-| `bun run format` | 执行 Prettier 格式化 | 格式化 TS/Vue/CSS，自动对齐 Tailwind 类名 |
-| `bun run format:check` | 仅检查 Prettier 格式不改文件 | 与 CI 门禁一致，提交前确认无格式漂移 |
-| `bun run lint` | 运行 Oxlint 静态诊断 | 秒级检测代码潜藏隐患与模块循环引用 |
-| `bun run test` | 执行 Vitest 单元测试 | 验证前端纯逻辑与工具函数 |
-| `bun run version:check` | 检查三处版本号一致性 | 检查 `package.json`、`Cargo.toml`、`tauri.conf.json5` |
-| `bun run release <版本>` | 一键触发版本发布流程 | 自动校验、同步版本号、打 Tag 并推送 |
-
----
-
-## 📦 自动化发版与 CI/CD
-
-本模板内置了开箱即用的自动化版本管理与全平台持续部署（CI/CD）方案。
-
-### 一键发版工作流
-
-无需手动修改多处版本号并手打 tag，只需执行一条指令：
+### 一键发版
 
 ```bash
-# 方式一：直接指定版本号
-bun run release 0.2.0
-
-# 方式二：按 semver 规则自动递增 (patch / minor / major)
-bun run release patch
-
-# 方式三：预发布版本（Release 会自动打上 prerelease 标记）
-bun run release 0.2.0-beta.1
+bun run release 0.2.0            # 指定版本
+bun run release patch            # patch / minor / major 自动递增
+bun run release 0.2.0-beta.1     # 预发布（Release 自动标 prerelease）
+bun run release patch --dry-run  # 只预览计划
+bun run release patch --no-push  # 本地 commit + tag，不推送
 ```
 
-发版脚本 (`scripts/release.ts`) 会自动执行严密的安全检查：
-1. **工作区洁净度检查**：确保没有未提交的改动或未跟踪的文件；
-2. **分支与远程同步检查**：确保位于 `main` 分支，且本地已完全同步远端 `origin/main`；
-3. **Tag 防重检查**：验证本地与 GitHub 远端均不存在相同的版本 Tag；
-4. **同步版本号**：原子化同步 `package.json`、`src-tauri/Cargo.toml` 和 `src-tauri/tauri.conf.json5`（保留 JSON5 注释），并离线刷新 `Cargo.lock`；
-5. **Git Commit & Tag & Push**：生成格式化的发布提交 (`chore(release): vX.Y.Z`)，创建附注 Tag 并推送到 GitHub 远端。
+`scripts/release.ts` 依次执行：工作区洁净检查 → 位于 `main` 且与 `origin/main` 同步 → tag 不重复 → 同步三处版本号并刷新 `Cargo.lock` → `chore(release): vX.Y.Z` 提交 → 附注 tag → `git push --follow-tags`。
 
-> [!NOTE]
-> 支持通过 `--dry-run` 预览发布计划而不真正修改文件，或通过 `--no-push` 仅在本地完成 commit + tag。
+### 流水线
 
-### 自动化跨平台打包矩阵 (`release.yml`)
-
-当 `v*` tag 被推送到 GitHub 后，GitHub Actions 会自动接管跨平台流水线：
+- **`ci.yml`**：push / PR 到 `main` 触发。前端 Prettier + Oxlint + `vue-tsc` + Vitest；Rust 在 `windows-latest` 与 `ubuntu-24.04` 并行 fmt / clippy / test。
+- **`release.yml`**：推送 `v*` tag 触发。
 
 ```text
-[ Tag v* ] ──> 1. verify (校验版本号一致性 + 前端 Lint/测试)
-                   │
-                   └──> 2. build (四平台矩阵并行编译打包)
-                            ├── Windows x64        (.msi, -setup.exe)
-                            ├── macOS aarch64      (.dmg, Apple Silicon)
-                            ├── macOS x64          (.dmg, Intel 交叉编译)
-                            └── Linux x64          (.deb, .rpm, .AppImage)
-                                     │
-                                     └──> 3. publish (所有平台就绪后，一次性创建 GitHub Release)
+[ Tag v* ] ──> verify（版本一致性 + 前端门禁）
+                  └──> build（并行）
+                        ├── Windows x64     .msi / -setup.exe
+                        ├── macOS aarch64   .dmg
+                        ├── macOS x64       .dmg（ARM Runner 交叉编译）
+                        └── Linux x64       .deb / .rpm / .AppImage
+                              └──> publish（全部成功后一次性创建 GitHub Release）
 ```
 
-- **原子化发布保障**：若任意一个平台的构建发生失败，`publish` 步骤将不会触发，绝不留下缺斤少两的半成品 Release。
-- **发布产物汇总**：
+任一平台失败则不发布，不会留下缺平台的半成品 Release。
 
-| 平台 | 安装包格式 | 架构 / 构建基准 |
-|---|---|---|
-| **Windows** | `.msi`, `-setup.exe` (NSIS) | x64 (基于 `windows-latest`) |
-| **macOS** | `.dmg` | Apple Silicon (`aarch64-apple-darwin`) |
-| **macOS** | `.dmg` | Intel (`x86_64-apple-darwin`，ARM Runner 交叉编译) |
-| **Linux** | `.deb`, `.rpm`, `.AppImage` | x64 (基于 `ubuntu-24.04`) |
+## 🗺️ 已知限制与路线
 
-> [!IMPORTANT]
-> **代码签名与发布安全**：  
-> 默认生成的安装包未配置商业签名证书。Windows 首次运行会弹出 SmartScreen 拦截，macOS 需在「系统设置 → 隐私与安全性」中手动放行。正式商业发布前，请参阅 Tauri 官方文档将代码签名凭据配置到 GitHub Secrets 中。
+- 剪贴板监听 / 粘贴仅 Windows；macOS / Linux 待实现。
+- 模拟粘贴对以管理员权限运行的目标窗口无效（UIPI 限制）。
+- 唤出快捷键暂不可配置，无设置页、无开机自启。
+- 未支持：HTML / RTF 富文本、纯文本粘贴、多选、数字键快速粘贴、OCR。
+- 数据库迁移失败或文件损坏时应用拒绝启动，需手动删除 `clipboard/history.db`。
 
----
+## 📄 许可证
 
-## 📄 开源许可证
-
-本项目基于 [MIT License](https://opensource.org/licenses/MIT) 开源，欢迎自由复用、定制与二次分发。
+[MIT](LICENSE)
