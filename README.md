@@ -84,7 +84,7 @@ bun run dev
 ```
 
 > [!TIP]
-> **关于双向降级**：通过 `bun run dev` 启动纯浏览器模式时，页面会调用 `src/lib/runtime.ts` 感知到不在 WebView 中：`src/lib/api.ts` 的命令封装降级为 no-op 或默认值（如唤出键回退为默认键位），`src/lib/window.ts` 的尺寸同步与 `useTauriEvent` 的事件订阅直接跳过。这允许前端工程师在没有安装 Rust 环境的设备上快速完成界面开发；窗口显隐、托盘、全局快捷键等原生能力需 `bun run tauri dev` 联调。
+> **关于双向降级**：通过 `bun run dev` 启动纯浏览器模式时，页面会调用 `src/lib/runtime.ts` 感知到不在 WebView 中：`src/lib/api/` 的命令封装降级为 no-op 或默认值（如唤出键回退为默认键位），`src/lib/window.ts` 的尺寸同步与 `useTauriEvent` 的事件订阅直接跳过。这允许前端工程师在没有安装 Rust 环境的设备上快速完成界面开发；窗口显隐、托盘、全局快捷键等原生能力需 `bun run tauri dev` 联调。
 
 ---
 
@@ -201,10 +201,10 @@ git commit -m "chore: initialize project from tauri-vue-starter template"
 
 ### 1. 前端通信分层 (IPC Architecture)
 
-- **禁止组件直接调用 `invoke`**：所有前后端 IPC 通信必须收敛在 `src/lib/api.ts` 中。
+- **禁止组件直接调用 `invoke`**：所有前后端 IPC 通信必须收敛在 `src/lib/api/<domain>.ts` 中(由 `src/lib/api/index.ts` 汇出)。
 - **运行时环境降级**：`api.ts` 借助 `runtime.ts` 的 `isTauriRuntime()` 检测是否存在 `__TAURI_INTERNALS__`。在浏览器开发环境中自动走降级分支，保证页面可用，防止调用崩溃。
 - **类型一致性**：可失败的 Rust 命令返回 `Result<T, AppError>`，前端捕获的 `error` 即为格式化好的中文字符串，直接绑定在视图提示中即可。
-- **Tauri API 三个入口**：`@tauri-apps/api/core` 只在 `lib/api.ts`，`@tauri-apps/api/window` 只在 `lib/window.ts`（仅尺寸同步），`@tauri-apps/api/event` 只在 `composables/useTauriEvent.ts`；窗口显示 / 隐藏由 Rust 侧控制，前端隐藏走 `hideLauncher()` 命令。
+- **Tauri API 三个入口**：`@tauri-apps/api/core` 只在 `lib/api/**`，`@tauri-apps/api/window` 只在 `lib/window.ts`（仅尺寸同步），`@tauri-apps/api/event` 只在 `composables/useTauriEvent.ts`；窗口显示 / 隐藏由 Rust 侧控制，前端隐藏走 `hideLauncher()` 命令。
 
 ### 2. Tailwind CSS v4 三层设计令牌
 

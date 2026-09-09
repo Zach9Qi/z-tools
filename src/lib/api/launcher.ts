@@ -1,3 +1,5 @@
+// 启动器命令封装:与 `src-tauri/src/commands/launcher.rs` 一一对应(函数名 = 命令名 camelCase)。
+// 由 `src/lib/api/index.ts` 汇出,调用方统一 `import { … } from "@/lib/api"`;非 Tauri 运行时降级为 no-op / 默认值。
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "@/lib/runtime";
 

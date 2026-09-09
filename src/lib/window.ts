@@ -1,6 +1,6 @@
 // 整个 src/ 只允许这里 import `@tauri-apps/api/window`。
-// 本文件只负责把面板高度同步给窗口;显示 / 隐藏由 Rust 侧控制(命令 hide_launcher / 全局快捷键 / 托盘),见 lib/api.ts。
-// 与 lib/api.ts 同一套规则:浏览器预览(无 Tauri 运行时)降级为 no-op,失败只记日志不抛出。
+// 本文件只负责把面板高度同步给窗口;显示 / 隐藏由 Rust 侧控制(命令 hide_launcher / 全局快捷键 / 托盘),见 lib/api/launcher.ts。
+// 与 lib/api/ 同一套规则:浏览器预览(无 Tauri 运行时)降级为 no-op,失败只记日志不抛出。
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { isTauriRuntime } from "@/lib/runtime";
 
