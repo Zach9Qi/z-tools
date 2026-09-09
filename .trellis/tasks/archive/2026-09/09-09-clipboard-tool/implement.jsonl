@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增 clipboard.rs + clipboard/{store,windows}.rs 与 commands/clipboard.rs 必须遵守 xxx.rs+xxx/ 布局与三段式分层"}
+{"file": ".trellis/spec/backend/state-events-async.md", "reason": "首个托管状态(ClipboardStore/Watcher/PreviousForeground)、clipboard://changed 事件、spawn_blocking 监听线程、非 Send 句柄不跨 await 的约束"}
+{"file": ".trellis/spec/backend/command-guidelines.md", "reason": "5 个 async 命令的入参校验、Result<T, AppError>、文档注释口径"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "新增 Database/Clipboard/Unsupported 变体的中文文案与测试要求"}
+{"file": ".trellis/spec/backend/config-and-permissions.md", "reason": "Cargo.toml 依赖注释、cfg(windows) 平台依赖、assetProtocol 配置注释、平台实现拆文件规则、launcher show 时序约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "cargo fmt/clippy -D warnings/test 门禁"}
+{"file": ".trellis/spec/guides/ipc-contract.md", "reason": "命令/事件/tagged enum 两侧命名对照与变更清单"}
+{"file": ".trellis/spec/frontend/tool-module-guidelines.md", "reason": "view 型工具页契约(query prop、单根、可用高度、保留键位)、删除 demo 与 registry 登记步骤"}
+{"file": ".trellis/spec/frontend/ipc-guidelines.md", "reason": "invoke/convertFileSrc 只能在 src/lib/api/**、非 Tauri 降级假数据、事件走 useTauriEvent、类型镜像放 src/types"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "useClipboardHistory 的组织方式与 useKeymap 登记规则"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "ClipboardPage/Tabs/ItemRow 组件写法、@mousedown.prevent 焦点约定"}
+{"file": ".trellis/spec/frontend/styling-guidelines.md", "reason": "语义 token、不写十六进制、z-index 变量"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "工具目录作为领域包,私有组件/composable/lib 放工具内"}
+{"file": ".trellis/tasks/09-09-clipboard-tool/design.md", "reason": "本任务技术设计:依赖选型、数据模型、命令契约、采集/粘贴数据流、前端结构与键位"}

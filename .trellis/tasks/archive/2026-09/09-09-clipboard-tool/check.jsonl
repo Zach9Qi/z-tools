@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Rust 门禁命令与测试要求"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端 format/lint/test/build 门禁"}
+{"file": ".trellis/spec/guides/ipc-contract.md", "reason": "§6 快速自检:invoke/事件/窗口 API 入口唯一性、事件名两侧一致、命令注册对照"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 Rust DTO ↔ TS 镜像 ↔ 组件渲染的字段一致性"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "检查是否重复实现了已有 composable/组件(useKeymap、useTauriEvent、KeyboardKey)"}
+{"file": ".trellis/spec/backend/state-events-async.md", "reason": "检查 emit 失败只 warn、无 block_on 出 setup、无 std::thread::spawn、锁不跨 await"}
+{"file": ".trellis/spec/backend/config-and-permissions.md", "reason": "检查依赖注释齐全、无第二份 windows crate、配置项有中文注释"}
+{"file": ".trellis/spec/frontend/tool-module-guidelines.md", "reason": "检查未登记 Escape/Backspace/Tab、未 import 启动器内部组件、图标已登记"}
+{"file": ".trellis/tasks/09-09-clipboard-tool/prd.md", "reason": "逐条核对验收标准"}
+{"file": ".trellis/tasks/09-09-clipboard-tool/design.md", "reason": "核对实现与设计的偏差"}
