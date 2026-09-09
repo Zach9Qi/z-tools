@@ -1,4 +1,5 @@
 //! 命令层模块根：IPC 入口，按领域一个文件。
 //! 命令保持薄：只做参数校验与转发，业务逻辑放到服务层。
 
+pub mod clipboard;
 pub mod launcher;

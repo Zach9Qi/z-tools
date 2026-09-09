@@ -48,11 +48,36 @@ pub fn anchor_position(work: WorkArea, window: (u32, u32)) -> (i32, i32) {
     (x.round() as i32, y.round() as i32)
 }
 
-/// 显示启动器：恢复鼠标命中 → 按当前显示器定位 → 显示 → 抢焦点 → 广播 `launcher://open`。
+/// 唤出启动器前的前台窗口句柄（`isize`，0 = 未记录）。`#[cfg(windows)]` 且 `app.manage` 托管；
+/// `show()` 在抢焦点之前写入，剪贴板粘贴据此把焦点还给原窗口再模拟 Ctrl+V。
+#[cfg(windows)]
+#[derive(Debug, Default)]
+pub struct PreviousForeground(std::sync::atomic::AtomicIsize);
+
+/// 最近一次唤出前记录的前台窗口；从未记录 / 状态未托管时为 `None`。
+#[cfg(windows)]
+pub fn previous_foreground<R: Runtime>(app: &AppHandle<R>) -> Option<isize> {
+    let hwnd = app
+        .try_state::<PreviousForeground>()?
+        .0
+        .load(std::sync::atomic::Ordering::SeqCst);
+    (hwnd != 0).then_some(hwnd)
+}
+
+/// 把某个窗口切到前台；窗口已关闭或系统拒绝时返回 `false`。见 `launcher/windows.rs::activate`。
+#[cfg(windows)]
+pub fn activate_window(hwnd: isize) -> bool {
+    windows::activate(hwnd)
+}
+
+/// 显示启动器：记录前台窗口 → 恢复鼠标命中 → 按当前显示器定位 → 显示 → 抢焦点 → 广播 `launcher://open`。
 pub fn show<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = main_window(app) else {
         return;
     };
+    // 必须在 show / set_focus 之前记录，之后前台就是我们自己了
+    #[cfg(windows)]
+    remember_foreground(app, &window);
     // 隐藏期间设置了忽略鼠标事件，显示前必须恢复，否则面板点不动
     if let Err(e) = window.set_ignore_cursor_events(false) {
         log::warn!("恢复窗口鼠标事件失败: {e}");
@@ -70,10 +95,16 @@ pub fn show<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// 隐藏启动器并广播 `launcher://close`，前端据此复位状态。
+///
+/// 幂等：窗口已不可见时直接返回、不重复广播。剪贴板粘贴先 `SetForegroundWindow` 到原窗口（触发失焦回调 hide）
+/// 再显式调 hide，没有这一步前端会收到两次 `launcher://close`。查不到可见性时按可见处理，宁可多隐藏一次。
 pub fn hide<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = main_window(app) else {
         return;
     };
+    if !window.is_visible().unwrap_or(true) {
+        return;
+    }
     hide_window(&window);
     if let Err(e) = app.emit(LAUNCHER_CLOSED, ()) {
         log::warn!("发送 {LAUNCHER_CLOSED} 事件失败: {e}");
@@ -141,6 +172,25 @@ pub fn install_platform_hooks<R: Runtime>(window: &WebviewWindow<R>) {
     match window.hwnd() {
         Ok(hwnd) => windows::suppress_alt_sysmenu(hwnd.0 as isize),
         Err(e) => log::warn!("获取窗口句柄失败，Alt 系统菜单拦截未安装: {e}"),
+    }
+}
+
+/// 记录当前前台窗口到 `PreviousForeground`；前台是启动器自己（可见但失焦后再次唤出）或任务栏（从托盘点开）时
+/// 保留上一次的记录，否则粘贴会把 Ctrl+V 发给任务栏。
+#[cfg(windows)]
+fn remember_foreground<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
+    let Some(state) = app.try_state::<PreviousForeground>() else {
+        return;
+    };
+    let foreground = windows::current_foreground();
+    if foreground == 0 || windows::is_taskbar(foreground) {
+        return;
+    }
+    let is_self = window.hwnd().is_ok_and(|own| own.0 as isize == foreground);
+    if !is_self {
+        state
+            .0
+            .store(foreground, std::sync::atomic::Ordering::SeqCst);
     }
 }
 

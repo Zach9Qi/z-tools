@@ -55,7 +55,16 @@
     "security": {
       // Content Security Policy；null 表示不启用（开发方便，生产建议收紧）。
       // 官方基线：default-src 'self'; connect-src ipc: http://ipc.localhost
-      "csp": null
+      // 收紧时还需加 img-src 'self' asset: http://asset.localhost，否则下方 assetProtocol 的剪贴板图片无法显示
+      "csp": null,
+      // asset:// 协议：前端用 convertFileSrc() 把 Rust 返回的绝对路径转成可直接 <img> 的 URL（不走 ACL，无对应 capability）
+      "assetProtocol": {
+        // 开启协议
+        "enable": true,
+        // 允许读取的路径白名单：只放剪贴板图片目录。$APPLOCALDATA = app_local_data_dir()，与 Rust 侧落盘目录同源；
+        // 不用 $APPDATA（Windows 上是 Roaming，项目约定所有落盘数据都在 LOCALAPPDATA）
+        "scope": ["$APPLOCALDATA/clipboard/images/**"]
+      }
     }
   },
   // 安装包/分发相关配置

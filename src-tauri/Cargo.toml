@@ -23,7 +23,8 @@ tauri-build = { version = "2", features = ["config-json5"] }
 [dependencies]
 # config-json5：让 tauri.conf.json5 可带注释，每个配置项都要写中文说明
 # tray-icon：启动器常驻后台且不在任务栏显示，托盘是用户开合面板 / 退出的唯一可见入口
-tauri = { version = "2", features = ["config-json5", "tray-icon"] }
+# protocol-asset：asset:// 协议，前端用 convertFileSrc() 直接 <img> 剪贴板图片文件；与 tauri.conf.json5 的 app.security.assetProtocol 配套，缺一不可
+tauri = { version = "2", features = ["config-json5", "tray-icon", "protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # 统一错误类型 AppError 的派生宏
@@ -33,7 +34,38 @@ log = "0.4.34"
 tauri-plugin-log = "2.9.1"
 # 全局快捷键：在任意前台应用下唤出 / 收起启动器面板（默认键见 launcher.rs）
 tauri-plugin-global-shortcut = "2"
+# 剪贴板读写（跨平台，clipboard/backend.rs）：文本 / 图片 / 文件列表三平台一致 API，1Password 维护、生态主流；
+# Windows 侧只依赖 windows-sys，不会引入第二份 windows crate。不选 clipboard-rs（小众且依赖 windows 0.59 与本仓库冲突）、
+# 不选官方 clipboard-manager 插件（无文件列表、无监听）。监听与粘贴模拟 arboard 不提供，按平台自写（clipboard/windows.rs）
+arboard = "3.6"
+# 剪贴板历史持久化：SQLite（bundled libsqlite3-sys）。只用运行时 sqlx::query*，不用 query! 宏，避免编译期依赖 DATABASE_URL；
+# runtime-tokio 对齐 tauri 内置的 tokio 运行时；migrate 让迁移脚本编译期内嵌（sqlx::migrate!，该宏由 sqlx-macros 提供，
+# 因此必须同时开 macros feature；开了也不用 query! 系列宏）；json 让 files 列以 sqlx::types::Json<Vec<String>> 直接绑定 / 解码，存储层不手写 serde_json
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros", "json"] }
+# 图片编解码：arboard 给出的是 RGBA8 像素，用 image 编码 PNG 原图 / 缩略图，粘贴时再解码回 RGBA；
+# 只开 png feature，与 arboard 内部依赖同一大版本不重复编译
+image = { version = "0.25", default-features = false, features = ["png"] }
+# 剪贴板内容哈希去重：需要跨版本稳定的哈希（std DefaultHasher 不保证），blake3 快且输出固定
+blake3 = "1"
+
+[dev-dependencies]
+# 仅测试用：#[tokio::test] 驱动 sqlx 内存库单测；运行时代码只用 tauri::async_runtime，不直接依赖 tokio
+tokio = { version = "1", features = ["macros", "rt"] }
 
 [target.'cfg(windows)'.dependencies]
-# 仅用于给无边框窗口装子类过程拦截 Alt 触发的系统菜单；版本对齐 tauri 的间接依赖，避免编译两份 windows crate
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# Windows 平台专属 Win32 绑定；版本对齐 tauri 的间接依赖，避免编译两份 windows crate。feature 用途：
+# - Win32_Foundation / Win32_UI_Shell / Win32_UI_WindowsAndMessaging：launcher/windows.rs 的 SetWindowSubclass 拦 Alt 系统菜单，
+#   以及 clipboard/windows.rs 的消息窗口（RegisterClassW / CreateWindowExW / GetMessageW）与前台窗口切换（GetForegroundWindow / SetForegroundWindow）
+# - Win32_Graphics_Gdi：RegisterClassW / WNDCLASSW 的 hbrBackground 字段类型 HBRUSH 定义在此，注册监听窗口类必需
+# - Win32_System_DataExchange：AddClipboardFormatListener / GetClipboardSequenceNumber 监听剪贴板变化
+# - Win32_System_LibraryLoader：GetModuleHandleW 取当前模块句柄以注册窗口类
+# - Win32_UI_Input_KeyboardAndMouse：SendInput 模拟 Ctrl+V 粘贴
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Graphics_Gdi",
+  "Win32_System_DataExchange",
+  "Win32_System_LibraryLoader",
+  "Win32_UI_Input_KeyboardAndMouse",
+] }
