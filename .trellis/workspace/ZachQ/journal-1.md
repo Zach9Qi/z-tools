@@ -51,3 +51,27 @@ Rust 侧启动器窗口管理:透明无边框置顶隐藏窗口、默认唤出�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: 剪贴板工具收尾:存储层精简、ClipboardStore 收拢、移除一键清空并归档
+<!-- trellis-session: v=2 fp=a71dfe30bf4dff02 -->
+
+**Date**: 2026-09-09
+**Task**: 剪贴板工具收尾:存储层精简、ClipboardStore 收拢、移除一键清空并归档
+**Branch**: `main`
+
+### Summary
+
+对照 zach-tools 评审 clipboard/store.rs:删除 kind_of/files_of/dimension_of 等对自写数据的防御分支,ClipboardKind 派生 sqlx::Type、files 列改 Json<Vec<String>>(sqlx json feature);ClipboardStore 的 struct + SQL + 图片文件 IO 全部收进 store.rs(save_image 同步,spawn_blocking 留在 record_inner);评估后保留 spec「非 Windows 不提供 stub」决策不做 cfg 门面;按用户决定前后端移除一键清空历史(命令/编排/store.clear/api/composable/Tab 栏按钮)并同步 spec 与任务 PRD/design;三段提交后归档 09-09-clipboard-tool。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d588669` | feat(backend): 剪贴板历史(SQLite 存储/Windows 监听/粘贴写回/收藏/游标分页) |
+| `131f880` | feat(frontend): 剪贴板工具页(分类 Tab/收藏筛选/搜索/游标分页/展开详情),api 拆为 api/<domain> |
+| `f103ecc` | docs(spec): 回写持久化规范、存储层边界、事件与命令约定,移除清空相关描述 |
+
+### Status
+
+[OK] **Completed**
