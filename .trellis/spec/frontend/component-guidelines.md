@@ -68,7 +68,7 @@ const emit = defineEmits<{
 
 ## 7. 禁止
 
-- 组件内 `import { invoke }` / `import { listen }` —— 走 `src/lib/api.ts` 与 composable(见 `ipc-guidelines.md`)。
+- 组件内 `import { invoke }` / `import { listen }` —— 走 `src/lib/api/**` 与 composable(见 `ipc-guidelines.md`)。
 - `any`、非空断言 `!`、`as unknown as X`(见 `type-safety.md`)。
 - `withDefaults`、运行时对象式 `defineProps({...})`、Options API。
 - 在 `setup` 顶层直接 `await` IPC(会把组件变成异步组件,需要 `<Suspense>`);初始化拉取写成不带 `await` 的函数调用或放 `onMounted`,并走 `try / catch` → `console.error` + `error` ref 套路(§3)。

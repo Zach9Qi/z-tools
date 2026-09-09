@@ -7,7 +7,7 @@
 ```
 src/components/*.vue
   → src/composables/useXxx.ts        (按需创建;组件级响应式逻辑)
-    → src/lib/api.ts                  (唯一 invoke 封装层)
+    → src/lib/api/<domain>.ts         (唯一 invoke 封装层,api/index.ts 汇出)
       → src/lib/runtime.ts            (isTauriRuntime:浏览器预览时走降级分支)
         ═══ IPC 边界(JSON 序列化)═══
       → src-tauri/src/commands/<domain>.rs   (薄命令:参数校验 + 转发)
@@ -55,7 +55,7 @@ src/components/*.vue
 | 边界 | 常见问题 |
 |------|----------|
 | 组件 ↔ composable | 状态放错层;组件直接 `import` `@tauri-apps/api` 绕过封装 |
-| composable ↔ `src/lib/api.ts` | 降级分支与真实分支返回类型不一致 |
+| composable ↔ `src/lib/api/<domain>.ts` | 降级分支与真实分支返回类型不一致 |
 | `api.ts` ↔ Rust 命令(IPC) | 参数 key 大小写、缺字段、返回类型泛型写错、命令未注册 |
 | Rust 命令 ↔ 领域模块 | 命令层混入业务逻辑;领域模块直接依赖 `tauri::AppHandle` 导致无法单测 |
 | 领域模块 ↔ `error.rs` | 新增错误场景没有对应 `AppError` 变体,用 `String` 或 `anyhow` 直接冒出去 |
@@ -72,7 +72,7 @@ src/components/*.vue
 以现有的 `hide_launcher`(无参、不可失败)为例,命令方向的契约是:
 
 ```ts
-// src/lib/api.ts
+// src/lib/api/launcher.ts
 export function hideLauncher(): Promise<void> {
   if (!isTauriRuntime()) return Promise.resolve(); // 浏览器预览:没有窗口可隐藏,no-op
   return invoke<void>("hide_launcher");

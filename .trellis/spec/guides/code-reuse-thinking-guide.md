@@ -19,7 +19,7 @@
 
 本仓库里典型的分叉点:
 
-- `src/lib/api.ts` 的浏览器降级文案与 Rust 命令返回值口径不一致;
+- `src/lib/api/<domain>.ts` 的浏览器降级文案与 Rust 命令返回值口径不一致;
 - 同一个 Rust 结构体在多个 `.vue` 里各写一份 `interface` 镜像;
 - 多个命令各自 `trim()` 并判空同一类用户输入,错误文案却各不相同。
 
@@ -54,15 +54,15 @@ grep -rn "launcher://" src/ src-tauri/src/
 
 | 内容 | 前端 | 后端 |
 |------|------|------|
-| IPC 调用 | `src/lib/api.ts`(唯一 `invoke` 封装层) | `src-tauri/src/commands/<domain>.rs` |
+| IPC 调用 | `src/lib/api/<domain>.ts`(唯一 `invoke` / `convertFileSrc` 封装层,`api/index.ts` 汇出) | `src-tauri/src/commands/<domain>.rs` |
 | 运行时判断 | `src/lib/runtime.ts`(`isTauriRuntime`) | —— |
 | 事件名与 payload 类型 | `src/lib/events.ts` | 领域模块内的事件常量 |
 | Rust 结构体镜像类型 | `src/types/<domain>.ts` | 领域模块 |
 | 可复用的响应式逻辑 | `src/composables/useXxx.ts` | —— |
 | 窗口尺寸同步 | `src/lib/window.ts`(唯一 `@tauri-apps/api/window` 入口,只做 setSize) | —— |
-| 窗口显示 / 隐藏 / 定位 / 失焦策略 | `src/lib/api.ts` 的 `hideLauncher()`(前端只有隐藏入口) | `src-tauri/src/launcher.rs`(命令 / 托盘 / 快捷键三处消费者共用) |
+| 窗口显示 / 隐藏 / 定位 / 失焦策略 | `src/lib/api/launcher.ts` 的 `hideLauncher()`(前端只有隐藏入口) | `src-tauri/src/launcher.rs`(命令 / 托盘 / 快捷键三处消费者共用) |
 | Rust 事件监听 | `src/composables/useTauriEvent.ts`(唯一 `@tauri-apps/api/event` 入口) | —— |
-| 唤出快捷键键位 | `api.ts` `getToggleShortcut()` 读后端;浏览器回退值是前端唯一字面量 | `launcher::DEFAULT_TOGGLE_SHORTCUT`(唯一定义处) |
+| 唤出快捷键键位 | `api/launcher.ts` `getToggleShortcut()` 读后端;浏览器回退值是前端唯一字面量 | `launcher::DEFAULT_TOGGLE_SHORTCUT`(唯一定义处) |
 | 快捷键登记 / 页脚提示 | `src/stores/keymap.ts` + `useKeymap` | —— |
 | 工具契约与登记 | `src/types/tool.ts`、`src/tools/registry.ts`、`src/tools/icons.ts` | —— |
 | 错误类型与文案 | 由后端序列化字符串直接展示 | `src-tauri/src/error.rs`(`AppError`) |
@@ -87,7 +87,7 @@ grep -rn "launcher://" src/ src-tauri/src/
 
 **反面**:事件名 `"settings://updated"` 字面量散落在多个 `.vue` 和 Rust 文件里;或者命令名字符串在 `api.ts` 之外的地方再次出现。
 
-**正面**:前端事件名只在 `src/lib/events.ts` 的 `EVENTS` 常量表里出现一次;Rust 侧对应一个 `pub const`。命令名字面量只允许出现在 `src/lib/api.ts` 的封装函数内部和 Rust 的 `#[tauri::command]` 函数名上。
+**正面**:前端事件名只在 `src/lib/events.ts` 的 `EVENTS` 常量表里出现一次;Rust 侧对应一个 `pub const`。命令名字面量只允许出现在 `src/lib/api/<domain>.ts` 的封装函数内部和 Rust 的 `#[tauri::command]` 函数名上。
 
 ### 模式四:重复的 payload 字段提取
 
@@ -119,7 +119,7 @@ useTauriEvent(EVENTS.SETTINGS_UPDATED, (payload) => {
 });
 ```
 
-`invoke` 返回值同理:泛型参数写在 `src/lib/api.ts` 里(`invoke<Settings>("get_settings")`),
+`invoke` 返回值同理:泛型参数写在 `src/lib/api/<domain>.ts` 里(`invoke<Settings>("get_settings")`),
 类型定义在 `src/types/<domain>.ts`,组件只消费函数返回值,不做二次断言。
 
 **规则**:同一个未定型的 payload 字段在两处被读取,就要在加第三处之前先建共享类型 / 归一化函数。
@@ -223,7 +223,7 @@ Rust 侧的 `match` 天然穷尽,但要避免用 `_ =>` 兜底吞掉新变体—
 - [ ] 前后端两侧都搜过,确认没有已存在的等价实现
 - [ ] 没有本应共享却被复制粘贴的逻辑
 - [ ] 没有在共享类型之外重复做 `event.payload as X` / 返回值强转
-- [ ] 命令名只出现在 `src/lib/api.ts` 与 Rust 命令函数上;事件名只出现在 `src/lib/events.ts` 与 Rust 常量上
+- [ ] 命令名只出现在 `src/lib/api/<domain>.ts` 与 Rust 命令函数上;事件名只出现在 `src/lib/events.ts` 与 Rust 常量上
 - [ ] 输入校验只在 Rust 命令层做一次,前端没有复制一份错误文案
 - [ ] 同类模式采用同一结构(composable 命名、错误处理、loading 状态)
 - [ ] 按枢轴值分发的逻辑集中在一个穷尽 `switch` / `match` 里

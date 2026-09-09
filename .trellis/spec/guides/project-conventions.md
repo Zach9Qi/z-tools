@@ -53,6 +53,15 @@ cargo test
 - clippy 警告视为错误,不允许用 `#[allow(...)]` 掩盖,除非注释写明原因。
 - `.oxlintrc.json` 的 `ignorePatterns` 把 `.trellis/`、`.pi/` 等工作流脚手架排除在外;产品代码不得放进这些目录。
 
+### 4.1 dev server 与端口 1420(AI 代理必读)
+
+背景:`vite.config.ts` 设 `strictPort: true` + 端口 1420,`tauri.conf.json5` 的 `devUrl` 指向同一端口。曾出现代理用 `( bun run dev & )` 脱离会话启动 Vite 验证后未清理,留下常驻 node 进程占住 1420;也出现过代理见端口被占就 `taskkill` 掉用户手动开的 `tauri dev` 再自己重启。以下为硬约束:
+
+- **`bun run tauri dev` 是用户手测专用命令,代理禁止运行。** 它会弹窗、注册全局快捷键、挂托盘,代理既看不见也操作不了。任务文档里写「`tauri dev` 手测」时,执行主体是用户:代理跑完第 4 节的自动化门禁后,**列出手测步骤提示用户**即可。
+- **端口 1420 被占 = 用户的 dev server 正在运行。** 需要预览前端时直接访问 `http://localhost:1420` 复用;**禁止** `netstat` 找 PID 后 `taskkill` / `kill` 占用进程,端口冲突只能向用户说明并等用户决定。
+- 代理确需自行起纯前端预览(`bun run dev`)时:用会话托管的后台任务方式启动(pi 的 `bash background=true`),验证完立刻 `task_stop`;**禁止** `( … &)`、`nohup`、`start /b` 等脱离会话的启动方式。结束前用 `netstat -ano | findstr :1420` 确认无残留。
+- `bun run dev` 底下实际是 `bun → vite.exe(shim) → node vite.js`(Bun 尊重 `#!/usr/bin/env node` shebang),排查端口占用时看到 node 进程属正常,清理需连 bun / vite / node 三个一起。
+
 ## 5. 脚本与工具链
 
 - 包管理器固定 **bun**(`bun.lock`,CI `--frozen-lockfile`);不要引入 npm / pnpm lock。

@@ -1,18 +1,34 @@
 # 命令规范(#[tauri::command])
 
-> 参考实现:`src-tauri/src/commands/launcher.rs`(不可失败命令的样板:`hide_launcher` 返回 `()`、`get_toggle_shortcut` 返回 `&'static str`,两者都只转发到 `crate::launcher`)。命令是前端唯一能调用的 Rust 入口,也是**信任边界**。
+> 参考实现:`src-tauri/src/commands/launcher.rs`(不可失败命令的样板:`hide_launcher` 返回 `()`、`get_toggle_shortcut` 返回 `&'static str`,两者都只转发到 `crate::launcher`);`src-tauri/src/commands/clipboard.rs`(可失败 async 命令的样板:6 个 `pub async fn … -> Result<T, AppError>`,`State<'_, ClipboardStore>` 注入,`limit` 校验与 `query` trim 在命令层,其余全部转发 `crate::clipboard`)。命令是前端唯一能调用的 Rust 入口,也是**信任边界**。
 
 ---
 
 ## 1. 签名
 
 ```rust
-// 示意:可失败命令的形态。仓库当前所有命令均不可失败,第一个可失败命令出现时按这个样子写
-/// 重命名当前配置。
+// 现实样板(commands/clipboard.rs):可失败 async 命令。State 注入 + Result<T, AppError>;校验在最前,然后转发
+/// 按 kind × favoriteOnly × query 叠加筛选并游标分页,`ORDER BY copied_at DESC, id DESC`。
 ///
-/// `name` 为用户输入,去除首尾空白后为空则返回参数错误,由前端直接展示文案。
+/// `limit` 不在 1..=200 内返回参数错误;关键字先 trim,只有空白时视为不过滤。
 #[tauri::command]
-pub fn rename_profile(name: &str) -> Result<String, AppError> { … }
+pub async fn list_clipboard_items(
+    store: State<'_, ClipboardStore>,
+    mut query: ListQuery,
+) -> Result<Vec<ClipboardItem>, AppError> {
+    validate_limit(query.limit)?;
+    query.query = query.query.trim().to_owned();
+    store.list(&query).await
+}
+
+#[tauri::command]
+pub async fn set_clipboard_item_favorite(
+    store: State<'_, ClipboardStore>,
+    id: i64,
+    favorite: bool,
+) -> Result<(), AppError> {
+    store.set_favorite(id, favorite).await
+}
 
 // 现实样板(commands/launcher.rs):不可失败就直接返回 T;窗口 API 的失败已在领域层记日志,前端无需也无法处理
 #[tauri::command]
@@ -25,7 +41,8 @@ pub fn get_toggle_shortcut() -> &'static str { crate::launcher::DEFAULT_TOGGLE_S
 - 必须 `pub`(在独立模块里定义命令的官方要求),命令名不受模块作用域影响,全局唯一。
 - **可失败就返回 `Result<T, AppError>`**;不写 `Result<T, String>`(官方文档称其「不 idiomatic」;与之伴生的满地 `map_err(|e| e.to_string())` 会丢掉类型信息且文案不统一)。不可能失败的命令直接返回 `T`。
 - **没有 `.await` 就写同步 `fn`**,不要为了「看起来统一」全写 `async fn`(可用 `clippy::unused_async = deny` 机制化禁止空 async)。需要 IO / 网络 / 长耗时时才 `async fn`。
-- async 命令不能用借用参数(`&str`、`State<'_, T>` 在 async 签名里受 tauri#2533 限制):改用 `String`,或把 `State` 换成 `AppHandle` 后 `app.state::<T>()`,或让返回类型为 `Result` 以绕过。
+- async 命令不能用借用参数(`&str` 在 async 签名里受 tauri#2533 限制):改用 `String`。`State<'_, T>` 在 async 命令里**可以用**,前提是返回类型为 `Result`(`commands/clipboard.rs` 全部如此);返回裸 `T` 的 async 命令才需要换成 `AppHandle` 后 `app.state::<T>()`。
+- 需要平台差异的命令(`paste_clipboard_item`),差异放在领域函数的 `#[cfg]` 两份实现上,命令签名与 `generate_handler!` 不带 cfg;不支持的平台返回 `AppError::Unsupported`,不静默 no-op。
 - 参数按需注入:`State<'_, T>`(托管状态)、`AppHandle`(需要 emit / 取路径 / 开窗口)、`WebviewWindow`(只对当前窗口操作)。不在命令里用全局 static 拿 `AppHandle`。
 
 ## 2. 参数与序列化
@@ -75,7 +92,8 @@ pub async fn update_settings(
 }
 ```
 
-- 校验放在命令层最前面,失败返回 `AppError::InvalidInput("中文原因")`;字符串输入先 `trim()` 再判空。
+- 校验放在命令层最前面,失败返回 `AppError::InvalidInput("中文原因")`;字符串输入先 `trim()` 再判空。现例:`list_clipboard_items` 的 `validate_limit`(范围常量 `LIMIT_RANGE: RangeInclusive<u32> = 1..=200`,文案「每页条数必须在 1..=200 之间」)与 `query.query.trim()`;存储层信任 `limit` 已校验。
+- **命令层不一定要 emit**:前端自己发起的变更(删除 / 收藏)它已知结果,命令返回 `Ok` 即可;只有前端无法自知的变化(监听器录入)才在领域层 emit(见 `state-events-async.md` §2)。上面示意代码里的第 4 步适用于「多窗口 / 多消费者」场景。
 - 窗口操作类命令(`hide_launcher`)不返回 `Result`:领域层 `launcher.rs` 已把所有 Tauri 窗口 API 的失败 `log::warn!` 并继续,前端拿到错误也做不了什么(窗口没隐藏只是留在屏幕上);不为了〈看起来统一〉包一层 `Ok(())`。
 - 命令体不写业务规则(见 `directory-structure.md` 三段式);经验值超过 ~30 行就该考虑拆。
 - 不在命令里 `block_on`(仅允许 setup 阶段使用);不在 async 命令里 `std::thread::sleep` / 忙等。
@@ -89,9 +107,9 @@ pub async fn update_settings(
 
 ## 5. 测试
 
-- 带校验的命令在文件底部 `#[cfg(test)] mod tests`,测「校验被拒 → 正确变体 + 中文文案」和「正常路径」两类;`AppError` 的序列化契约由 `error.rs` 的 `invalid_input_message_has_category_prefix` 锁定。
+- 带校验的命令在文件底部 `#[cfg(test)] mod tests`,测「校验被拒 → 正确变体 + 中文文案」和「正常路径」两类(现例 `commands/clipboard.rs` 的 `limit_out_of_range_is_rejected_with_chinese_message` / `limit_in_range_is_accepted`,校验抽成私有 `fn validate_limit` 才能不带 `State` 测);`AppError` 的序列化契约由 `error.rs` 的 `*_message_has_category_prefix` 锁定。
 - 需要 `AppHandle` / `State` / 窗口的命令不做单测;把逻辑下沉到领域层让其可测。现例:`launcher.rs` 把定位算法抽成纯函数 `anchor_position(work, window_size)`,三条测试(居中、副屏偏移、窄工作区贴左缘)不碰任何 Tauri 类型;真正调窗口 API 的 `position_anchored` 不测。
-- async 领域逻辑用 `#[tokio::test]`(需 `[dev-dependencies] tokio = { features = ["macros", "rt"] }`,当前未加,首次需要时添加并注释)。
+- async 领域逻辑用 `#[tokio::test]`(`[dev-dependencies] tokio = { features = ["macros", "rt"] }` 已加);数据库逻辑用 `sqlite::memory:` 内存库,见 `persistence.md` §6。
 
 ## 6. 禁止
 

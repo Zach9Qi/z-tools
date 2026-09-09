@@ -193,6 +193,11 @@ const { variant = "default", size = "md" } = defineProps<{
 
 - 字体族只在 `:root` 定义一次(`--font-family-sans` / `--font-family-mono`);`body` 默认 `font-sans`,组件只在需要等宽时写 `font-mono`。
 - 图标是 SVG 组件(`~icons/lucide/*`),尺寸 `size-4` 等,颜色随 `currentColor`;不设 `fill` / `stroke`。
+- 装饰图标 `aria-hidden="true"`;图标按 `kind` 选择时用 `as const` 对象表 + `<component :is>`(`ClipboardItemRow.vue` 的 `TYPE_ICONS`),不写三个 `v-if`。
+
+> **Warning(实心 / 空心切换)**:lucide 图标的 `<path>` 自带 `fill="none"` **presentation attribute**,在 `<svg>` 上写 `fill-current` 只作用于 svg 元素本身,覆盖不到子 path,图标仍是空心。
+>
+> 需要实心态时用 Tailwind 4 的直接子元素变体把 fill 打到 path 上:`*:fill-current`(CSS 规则优先级高于 presentation attribute)。现例 `ClipboardItemRow.vue` 的星标:`:class="item.favorite ? 'text-primary *:fill-current' : 'text-muted-foreground'"`——收藏态实心 + primary,未收藏空心 + muted。同一张图标两态共用,不另导一个 `star-filled`(lucide 没有)。
 
 ## 14. 禁止
 

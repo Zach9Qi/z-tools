@@ -27,7 +27,7 @@ bun run build         # vue-tsc -b(全量类型检查)+ vite build
 ## 3. 注释与可读性
 
 - 注释中文,写「为什么」:每个 `ref` 一行 `/** */`(代表什么、何时变、与谁互斥);每个非显然的配置项一行说明(参考 `vite.config.ts`、`src/components/launcher/LauncherPanel.vue`)。
-- 函数级 JSDoc 说明降级行为与失败方式(`src/lib/api.ts`、`src/lib/window.ts`)。
+- 函数级 JSDoc 说明降级行为与失败方式(`src/lib/api/launcher.ts`、`src/lib/api/clipboard.ts`、`src/lib/window.ts`)。
 - 文件头一段注释说明这个模块在整体里的位置与为何这样划分(`src/stores/keymap.ts`、`src/composables/useKeymap.ts`、`src/tools/icons.ts`),让读者不用先读完代码再猜职责。
 - 不写复述代码的注释(`// 设置 loading 为 true`)。
 - 经验参考值(非硬标准):文件超过约 200 行或组件同时管理 ≥5 个互相关联的 `ref`,考虑拆 composable / 子组件。
