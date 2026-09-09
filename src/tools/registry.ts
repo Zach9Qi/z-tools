@@ -1,10 +1,9 @@
 // 工具注册表:手工维护的模块数组,是启动器认识工具的唯一入口。
 // 新工具只需在 modules 里追加一项;catalog 与 moduleOf 由此派生,不用另改。
 import type { ToolItem, ToolModule } from "@/types/tool";
-import { demoLaunchTools, demoViewTool } from "@/tools/demo";
 
 /** 全部已注册模块;数组顺序即主页「全部工具」分区的展示顺序 */
-export const modules: ToolModule[] = [demoViewTool, ...demoLaunchTools];
+export const modules: ToolModule[] = [];
 
 /** 供搜索 / 网格使用的条目列表,与 modules 一一对应 */
 export const catalog: ToolItem[] = modules.map((module) => module.item);
