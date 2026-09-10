@@ -245,8 +245,11 @@ fn position_anchored<R: Runtime>(window: &WebviewWindow<R>) {
     }
 }
 
-/// 当前鼠标是否悬于本应用的托盘图标上。任一信息拿不到时按「不在」处理，
-/// 退化为普通失焦收起——宁可误收起，不可让面板留在屏幕上不收。
+/// 当前鼠标是否悬于本应用的托盘图标上。
+///
+/// 特殊边界情况：在 Windows 上，当托盘图标藏在折叠区域（overflow）时，
+/// 系统 API `tray.rect()` 会在折叠菜单未展开时借位返回任务栏角标 `^` 的矩形。
+/// 因此如果鼠标正停在 `^` 按钮上，不能当作停在托盘图标上（否则点击 `^` 不会收起启动器）。
 fn cursor_on_tray<R: Runtime>(app: &AppHandle<R>) -> bool {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return false;
@@ -257,6 +260,12 @@ fn cursor_on_tray<R: Runtime>(app: &AppHandle<R>) -> bool {
     let Ok(cursor) = app.cursor_position() else {
         return false;
     };
+
+    #[cfg(windows)]
+    if windows::is_cursor_on_notification_chevron(cursor.x, cursor.y) {
+        return false;
+    }
+
     rect_contains(&rect, cursor.x, cursor.y)
 }
 
