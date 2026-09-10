@@ -30,7 +30,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .tooltip(app.package_info().name.clone())
         .on_menu_event(|app, event| match event.id.as_ref() {
             MENU_OPEN => launcher::show(app),
-            MENU_QUIT => app.exit(0),
+            MENU_QUIT => launcher::quit(app), // 先 destroy 窗口再退出，见 launcher::quit
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

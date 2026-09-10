@@ -128,9 +128,9 @@
 | `toggle`(快捷键)只在 `visible && focused` 时隐藏,否则显示并抢焦点;快捷键回调只处理 `ShortcutState::Pressed` | 可见但失焦的面板按用户意图是「叫回来」;不过滞 Pressed 会在松键时再 toggle 一次 |
 | **失焦隐藏** + **托盘豁免**:`Focused(false)` → `hide_on_blur`,光标在托盘图标 rect 内则不动 | 点托盘也会先触发失焦;若此时收起,紧接的托盘点击看到的是「已隐藏」反而取反打开。托盘矩形凭 `launcher::TRAY_ID` 查,因此托盘要在 `init_hidden` 之前建好;任一信息拿不到时按「不在托盘上」处理——宁可误收起,不可不收起 |
 | **托盘右键不动面板**,只让系统弹菜单;左键 `Click`+`Up` → `toggle_from_tray`(只看可见性);「打开启动器」菜单项语义固定为显示并聚焦 | 用户右键可能只是想看菜单或退出,面板不应因此消失;托盘点击时焦点必然已离开面板,不再判焦点 |
-| `CloseRequested` 拦为隐藏(`api.prevent_close()` + `hide`),退出只走托盘菜单 `app.exit(0)` | 无边框窗口没有关闭按钮,但 Alt+F4 仍会触发;启动器应常驻,误按不该退进程 |
+| `CloseRequested` 拦为隐藏(`api.prevent_close()` + `hide`);退出走托盘菜单 `launcher::quit`:先 `destroy` 主窗口,等 `Destroyed` 再 `app.exit(0)` | 无边框窗口没有关闭按钮,但 Alt+F4 仍会触发;启动器应常驻,误按不该退进程。不能 `close()`(会被拦成隐藏);也不能直接 `exit(0)`:Windows 上 WebView2 注销 `Chrome_WidgetWin_0` 时父窗口还在会报 Error 1412 |
 | `setup_desktop` 顺序:插件 → 快捷键 → **clipboard(`setup_clipboard`:store + Windows 监听线程)** → 平台钩子 + `PreviousForeground` + 窗口事件 → 托盘 → `init_hidden` **最后且不 emit** | 插件不先注册 `global_shortcut()` 取不到;clipboard 只依赖 `app_local_data_dir`、不依赖窗口,放托盘前且库打不开要早失败(否则列表命令因无托管状态 panic);托盘要在 `init_hidden` 前建好(上述豁免);`init_hidden` 时前端尚未加载,emit 没人听 |
-| Builder 用 `.build(ctx)?.run(\|app, event\| …)` 而不是链式 `.run(ctx)`;`RunEvent::Exit` 时取 `ClipboardWatcher.hwnd()` 调 `stop_monitor` | 托盘菜单 `app.exit(0)`、系统关机等所有退出路径都经过 `Exit`,监听线程的消息窗口才能被正确摘除 |
+| Builder 用 `.build(ctx)?.run(\|app, event\| …)` 而不是链式 `.run(ctx)`;`RunEvent::Exit` 时取 `ClipboardWatcher.hwnd()` 调 `stop_monitor` | `launcher::quit` 的 `Destroyed` → `exit(0)`、系统关机等所有退出路径都经过 `Exit`,监听线程的消息窗口才能被正确摘除 |
 | 快捷键注册失败 `log::error!` 后继续启动 | 被其他软件占用不应让应用起不来,托盘仍能打开面板 |
 | **唤出快捷键单一常量** `launcher::DEFAULT_TOGGLE_SHORTCUT`(plugin 语法),注册、日志、`get_toggle_shortcut` 命令都读它;前端经 `getToggleShortcut()` 取当前生效值渲染键帽 | 为后续可配置预留口子:到时只改命令实现读设置,前端不动。因此代码注释与本规范都只写「默认唤出键」,不写具体键位 |
 | 窗口 API 失败一律 `log::warn!` 继续,领域函数不返回 `Result` | 调用方(托盘 / 快捷键回调)没能力处理这些错误;统一在领域层吞掉并记日志 |

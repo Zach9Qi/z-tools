@@ -119,7 +119,9 @@ fn setup_desktop(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     setup_clipboard(app)?;
 
     // 4. 平台钩子与窗口事件：失焦收起；无边框窗口没有关闭按钮，但 Alt+F4 仍会触发
-    //    CloseRequested，拦成「隐藏」而不是退出，退出只走托盘菜单。
+    //    CloseRequested，拦成「隐藏」而不是退出。真正退出走托盘 → launcher::quit：
+    //    destroy 主窗口（不能 close，会被上面拦住），Destroyed 后再 app.exit(0)，
+    //    否则 Windows 上 WebView2 注销 Chrome_WidgetWin_0 会报 Error 1412。
     //    Windows 上还要托管 PreviousForeground：show() 在抢焦点前记录前台窗口，剪贴板粘贴时还回去
     #[cfg(windows)]
     app.manage(launcher::PreviousForeground::default());
@@ -133,6 +135,7 @@ fn setup_desktop(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 api.prevent_close();
                 launcher::hide(&handle);
             }
+            tauri::WindowEvent::Destroyed => handle.exit(0),
             _ => {}
         });
     }

@@ -22,7 +22,7 @@ src-tauri/
     ├── lib.rs              # 组合根:插件注册、setup、generate_handler!、`#[cfg(desktop)] fn setup_desktop` / `fn setup_clipboard`;
     │                       # Builder 用 .build()?.run(|app, event| …) 在 RunEvent::Exit 停监听;不放业务逻辑
     ├── error.rs            # 全局统一 AppError;以 `pub mod error` 导出(见 error-handling.md §2)
-    ├── launcher.rs         # 领域层:启动器窗口 show / hide / toggle / 失焦策略、事件常量、anchor_position 纯函数(含测试);
+    ├── launcher.rs         # 领域层:启动器窗口 show / hide / toggle / 失焦 / quit、事件常量、anchor_position 纯函数(含测试);
     │                       # `#[cfg(windows)]` PreviousForeground 托管状态 + remember_foreground / previous_foreground / activate_window
     ├── launcher/
     │   └── windows.rs      # 平台钩子:`#[cfg(windows)]` SetWindowSubclass 拦 SC_KEYMENU;current_foreground / is_taskbar / activate

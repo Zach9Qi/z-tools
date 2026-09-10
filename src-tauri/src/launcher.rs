@@ -1,4 +1,4 @@
-//! 启动器窗口的领域逻辑：显示 / 隐藏 / 定位 / 失焦策略，被命令层、托盘、全局快捷键共同调用。
+//! 启动器窗口的领域逻辑：显示 / 隐藏 / 定位 / 失焦 / 退出策略，被命令层、托盘、全局快捷键共同调用。
 //!
 //! 这里不处理 IPC 参数，也不负责创建窗口；窗口的静态形态（透明、无边框、置顶等）在
 //! `tauri.conf.json5` 定义。所有 Tauri 窗口 API 的失败都在本模块吞掉并记日志——
@@ -162,6 +162,22 @@ pub fn toggle_from_tray<R: Runtime>(app: &AppHandle<R>) {
 pub fn init_hidden<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = main_window(app) {
         hide_window(&window);
+    }
+}
+
+/// 退出应用：先销毁主窗口，等 `Destroyed` 再 `app.exit(0)`（见 `lib.rs` 窗口事件）。
+///
+/// 不能走 `close()`：`CloseRequested` 被拦成隐藏，窗口会留下来。
+/// 也不能直接 `app.exit(0)`：Windows 上 WebView2 会在进程退出时注销 `Chrome_WidgetWin_0`，
+/// 父窗口还在就会报 Error 1412。窗口已不存在或销毁失败时退回 `exit(0)`，避免托盘退出没反应。
+pub fn quit<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = main_window(app) else {
+        app.exit(0);
+        return;
+    };
+    if let Err(e) = window.destroy() {
+        log::warn!("销毁启动器窗口失败: {e}");
+        app.exit(0);
     }
 }
 
