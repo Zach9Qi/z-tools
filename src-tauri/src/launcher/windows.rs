@@ -2,12 +2,13 @@
 //!
 //! 只由父模块 `launcher.rs` 以 `#[cfg(windows)]` 引入；这里不放任何跨平台逻辑。
 
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClassNameW, GetForegroundWindow, IsWindow, SC_KEYMENU, SetForegroundWindow, WM_NCDESTROY,
-    WM_SYSCOMMAND,
+    FindWindowExW, FindWindowW, GetClassNameW, GetForegroundWindow, GetWindowRect, IsWindow,
+    SC_KEYMENU, SetForegroundWindow, WM_NCDESTROY, WM_SYSCOMMAND,
 };
+use windows::core::w;
 
 /// 任务栏窗口类名：主屏 `Shell_TrayWnd`，副屏 `Shell_SecondaryTrayWnd`
 const TASKBAR_CLASSES: [&str; 2] = ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"];
@@ -16,6 +17,47 @@ const TASKBAR_CLASSES: [&str; 2] = ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"];
 pub fn current_foreground() -> isize {
     // 安全：无参数、无副作用的查询
     unsafe { GetForegroundWindow() }.0 as isize
+}
+
+/// 判断给定的屏幕物理坐标 `(x, y)` 是否落在任务栏通知区域的折叠角标 `^` 按钮上。
+///
+/// 当托盘图标处于折叠区内时，Windows 系统 API (`Shell_NotifyIconGetRect`) 会直接把该 `^` 按钮
+/// 的矩形当作托盘图标矩形返回。如果只判 `rect_contains`，点击 `^` 时就会误以为点在托盘图标上。
+/// 本函数通过比对 `TrayNotifyWnd` 通知区域的前导角标几何位置，精确排除对 `^` 按钮的误判。
+pub fn is_cursor_on_notification_chevron(x: f64, y: f64) -> bool {
+    let x = x.round() as i32;
+    let y = y.round() as i32;
+
+    unsafe {
+        // 主任务栏
+        let shell_tray = FindWindowW(w!("Shell_TrayWnd"), None).unwrap_or_default();
+        if shell_tray.is_invalid() {
+            return false;
+        }
+
+        // 通知区域窗口
+        let tray_notify = FindWindowExW(
+            Some(shell_tray),
+            None,
+            w!("TrayNotifyWnd"),
+            None,
+        )
+        .unwrap_or_default();
+
+        if tray_notify.is_invalid() {
+            return false;
+        }
+
+        let mut r = RECT::default();
+        if GetWindowRect(tray_notify, &mut r).is_err() {
+            return false;
+        }
+
+        // 角标按钮位于 TrayNotifyWnd 最前导（左侧边缘），宽度通常在 32~44 物理像素之间，
+        // 且垂直方向铺满 TrayNotifyWnd 高度
+        let chevron_width = 44;
+        x >= r.left && x < r.left + chevron_width && y >= r.top && y < r.bottom
+    }
 }
 
 /// `hwnd` 是否为任务栏（从托盘点开启动器时前台窗口就是它）；取不到类名按「不是」处理。

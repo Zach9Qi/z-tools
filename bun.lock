@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "tauri-vue-starter",
+      "name": "z-tools",
       "dependencies": {
         "@tauri-apps/api": "^2",
         "pinia": "^4.0.3",

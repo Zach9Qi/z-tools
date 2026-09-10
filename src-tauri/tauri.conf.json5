@@ -2,11 +2,11 @@
   // JSON Schema，供编辑器做补全与校验
   "$schema": "https://schema.tauri.app/config/2",
   // 应用显示名称（安装包、窗口等会用到）
-  "productName": "tauri-vue-starter",
+  "productName": "z-tools",
   // 应用版本号；与 package.json、Cargo.toml 同值，一律走 scripts/release.ts 修改，不要手改
   "version": "0.1.0",
-  // 【新项目必改】应用唯一标识（反向域名，打包/系统注册用），不要留 com.example
-  "identifier": "com.example.tauri-vue-starter",
+  // 应用唯一标识（反向域名，打包/系统注册用）；同时决定数据目录名 %LOCALAPPDATA%\<identifier>\，改动会导致旧数据不再被读取
+  "identifier": "com.zachq.z-tools",
   // 前后端构建相关配置
   "build": {
     // 开发模式启动前执行的命令（启动前端 dev server）
@@ -26,7 +26,7 @@
         // 窗口标识，代码里用这个名字查找窗口（capabilities/default.json 按此 label 授权）
         "label": "main",
         // 窗口标题（无边框看不到，但任务管理器 / 辅助功能仍会读）
-        "title": "tauri-vue-starter",
+        "title": "z-tools",
         // 面板宽度（逻辑像素）——全仓库唯一定义处，前端 setSize 时沿用 window.innerWidth
         "width": 800,
         // 初始高度（逻辑像素），仅在前端首次按内容 setSize 之前生效
