@@ -176,22 +176,19 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
   }
 
   /**
-   * ↑/↓ 移动选中:两端回绕(与主页网格一致);但在末条按 ↓ 且还有下一页时改为追加下一页并停在原位,
-   * 让键盘用户不会卡在第 100 条,也不会在还有数据时跳回顶部。
+   * ↑/↓ 移动选中:顶底停住,不回绕。末条按 ↓ 且还有下一页时追加下一页并停在原位,
+   * 让键盘用户不会卡在第 100 条。
    */
   function moveSelection(delta: 1 | -1): void {
     const length = items.value.length;
     if (length === 0) return;
     const next = selectedIndex.value + delta;
     if (next >= length) {
-      if (hasMore.value) {
-        void loadMore();
-        return;
-      }
-      selectedIndex.value = 0;
+      if (hasMore.value) void loadMore();
       return;
     }
-    selectedIndex.value = next < 0 ? length - 1 : next;
+    if (next < 0) return;
+    selectedIndex.value = next;
   }
 
   /** 选中某个下标(鼠标悬停) */
