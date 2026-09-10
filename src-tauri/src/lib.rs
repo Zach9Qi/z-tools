@@ -14,7 +14,18 @@ mod tray;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // 单实例插件必须最先注册：重复启动在日志、快捷键、剪贴板开库 / 监听与托盘初始化前退出。
+    #[cfg(desktop)]
+    let builder = builder
+        // 插件早于主窗口初始化，先托管状态以接住启动期间的唤回请求。
+        .manage(launcher::StartupActivation::default())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // 重复启动只唤回已有面板，不 toggle；就绪后复用 show 的完整契约。
+            launcher::request_show(app);
+        }));
+
+    builder
         // 日志插件：debug 构建输出 Debug 级，发布构建只输出 Info 级
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -44,11 +55,16 @@ pub fn run() {
             commands::clipboard::delete_clipboard_item,
             commands::clipboard::set_clipboard_item_favorite,
         ])
-        // 用 build + run 而非链式 run：需要在 Exit 事件里停掉剪贴板监听线程，覆盖托盘退出等所有退出路径
+        // 用 build + run：Ready 时消费启动期唤回请求，Exit 时停掉剪贴板监听，覆盖托盘退出等所有退出路径。
         .build(tauri::generate_context!())
         .expect("启动应用失败")
-        // 两个参数带下划线：目前只有 Windows 在退出时有事可做，非 Windows 下它们未被使用
+        // 两个参数带下划线：桌面端处理 Ready，Windows 还处理 Exit，移动端未使用。
         .run(|_app, _event| {
+            #[cfg(desktop)]
+            if let tauri::RunEvent::Ready = _event {
+                // Tauri 在完整 setup（含 init_hidden）之后才通知 Ready，避免唤回被初始隐藏覆盖。
+                launcher::finish_startup(_app);
+            }
             #[cfg(windows)]
             if let tauri::RunEvent::Exit = _event {
                 use tauri::Manager;

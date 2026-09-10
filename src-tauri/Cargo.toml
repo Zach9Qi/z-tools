@@ -51,6 +51,10 @@ blake3 = "1"
 # 仅测试用：#[tokio::test] 驱动 sqlx 内存库单测；运行时代码只用 tauri::async_runtime，不直接依赖 tokio
 tokio = { version = "1", features = ["macros", "rt"] }
 
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# 桌面端单实例：使用官方插件在其他初始化前拦截重复启动，并通知已有实例显示面板；与 lib.rs 的 cfg(desktop) 对齐
+tauri-plugin-single-instance = "2"
+
 [target.'cfg(windows)'.dependencies]
 # Windows 平台专属 Win32 绑定；版本对齐 tauri 的间接依赖，避免编译两份 windows crate。feature 用途：
 # - Win32_Foundation / Win32_UI_Shell / Win32_UI_WindowsAndMessaging：launcher/windows.rs 的 SetWindowSubclass 拦 Alt 系统菜单，

@@ -4,6 +4,9 @@
 //! `tauri.conf.json5` 定义。所有 Tauri 窗口 API 的失败都在本模块吞掉并记日志——
 //! 调用方（托盘 / 快捷键回调）没有能力处理这些错误。
 
+#[cfg(desktop)]
+use std::sync::atomic::{AtomicU8, Ordering};
+
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Runtime, WebviewWindow};
 
 #[cfg(windows)]
@@ -21,6 +24,35 @@ pub const DEFAULT_TOGGLE_SHORTCUT: &str = "alt+enter";
 pub const LAUNCHER_OPENED: &str = "launcher://open";
 /// 面板已隐藏；前端 `src/lib/events.ts` 的 `EVENTS.LAUNCHER_CLOSED` 与此一一对应，无 payload
 pub const LAUNCHER_CLOSED: &str = "launcher://close";
+
+/// 启动期的面板唤回请求，由 Builder 在单实例插件之前托管；只协调显示时序，不参与进程互斥。
+/// 插件回调可能在 WebView 创建消息泵中提前到达，必须等 Ready（含初始隐藏已完成）再显示。
+#[cfg(desktop)]
+#[derive(Debug, Default)]
+pub struct StartupActivation(AtomicU8);
+
+#[cfg(desktop)]
+impl StartupActivation {
+    // 默认值 0 表示仍在启动且没有唤回请求；多个早到请求合并为一个待显示状态。
+    const STARTING: u8 = 0;
+    const PENDING: u8 = 1;
+    const READY: u8 = 2;
+
+    /// 记录请求，返回是否应立即显示；CAS 与 finish 的交换互斥排序，避免就绪边界丢唤醒。
+    fn request(&self) -> bool {
+        self.0.compare_exchange(
+            Self::STARTING,
+            Self::PENDING,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) == Err(Self::READY)
+    }
+
+    /// 标记就绪并消费待显示请求；重复完成不会再次显示。
+    fn finish(&self) -> bool {
+        self.0.swap(Self::READY, Ordering::SeqCst) == Self::PENDING
+    }
+}
 
 /// 显示器工作区（排除任务栏后的可用区域），物理像素坐标
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +100,28 @@ pub fn previous_foreground<R: Runtime>(app: &AppHandle<R>) -> Option<isize> {
 #[cfg(windows)]
 pub fn activate_window(hwnd: isize) -> bool {
     windows::activate(hwnd)
+}
+
+/// 单实例回调的唤回入口：启动中仅记录请求，就绪后始终显示并聚焦，不切换隐藏。
+#[cfg(desktop)]
+pub fn request_show<R: Runtime>(app: &AppHandle<R>) {
+    if app
+        .try_state::<StartupActivation>()
+        .is_some_and(|state| state.request())
+    {
+        show(app);
+    }
+}
+
+/// 在 RunEvent::Ready 中完成启动：初始隐藏已结束，此时才消费提前到达的唤回请求。
+#[cfg(desktop)]
+pub fn finish_startup<R: Runtime>(app: &AppHandle<R>) {
+    if app
+        .try_state::<StartupActivation>()
+        .is_some_and(|state| state.finish())
+    {
+        show(app);
+    }
 }
 
 /// 显示启动器：记录前台窗口 → 恢复鼠标命中 → 按当前显示器定位 → 显示 → 抢焦点 → 广播 `launcher://open`。
@@ -302,6 +356,42 @@ fn rect_contains(rect: &tauri::Rect, x: f64, y: f64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(desktop)]
+    #[test]
+    fn startup_activation_stays_hidden_without_request() {
+        let activation = StartupActivation::default();
+        assert!(!activation.finish());
+    }
+
+    #[cfg(desktop)]
+    #[test]
+    fn startup_activation_coalesces_early_requests() {
+        let activation = StartupActivation::default();
+        assert!(!activation.request());
+        assert!(!activation.request());
+        assert!(activation.finish());
+    }
+
+    #[cfg(desktop)]
+    #[test]
+    fn startup_activation_shows_each_ready_request() {
+        let activation = StartupActivation::default();
+        assert!(!activation.finish());
+        assert!(activation.request());
+        assert!(activation.request());
+    }
+
+    #[cfg(desktop)]
+    #[test]
+    fn startup_activation_finishes_idempotently() {
+        let activation = StartupActivation::default();
+        assert!(!activation.request());
+        assert!(activation.finish());
+        assert!(!activation.finish());
+        assert!(activation.request());
+        assert!(!activation.finish());
+    }
 
     #[test]
     fn centers_horizontally_and_anchors_top_at_quarter() {
