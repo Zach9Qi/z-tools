@@ -1,5 +1,5 @@
 //! 剪贴板历史领域层：常量、IPC DTO、内部快照类型 `Captured`、哈希 / 可搜索文本等纯函数，
-//! 以及编排用例 `record()`（监听器录入）、`paste()`（写回 + 切前台 + 模拟 Ctrl+V）、`delete_item`。
+//! 以及编排用例 `record()`（监听器录入）、`paste()`（写回 + 切前台 + 模拟 Ctrl+V）。
 //!
 //! 边界：
 //! - 历史存储（`ClipboardStore`：SQLite 行 + `images/` 下的图片文件）整体在 `clipboard/store.rs`，这里只 `pub use`；
@@ -225,32 +225,13 @@ pub fn file_name_of(path: &str) -> String {
 ///
 /// 失败只记日志：监听器没有调用方可以处理错误，漏记一条不影响后续采集。
 pub async fn record<R: Runtime>(app: &AppHandle<R>, store: &ClipboardStore, captured: Captured) {
-    if let Err(e) = record_inner(store, &captured).await {
+    if let Err(e) = store.record_captured(&captured).await {
         log::warn!("记录剪贴板内容失败: {e}");
         return;
     }
     if let Err(e) = app.emit(CLIPBOARD_CHANGED, ()) {
         log::warn!("发送 {CLIPBOARD_CHANGED} 事件失败: {e}");
     }
-}
-
-async fn record_inner(store: &ClipboardStore, captured: &Captured) -> Result<(), AppError> {
-    if matches!(captured, Captured::Image { .. }) {
-        // 文件 IO 放 blocking 线程；store 是 Arc 级句柄，captured 里的 PNG 字节需要拷一份进线程
-        let (store, captured) = (store.clone(), captured.clone());
-        tauri::async_runtime::spawn_blocking(move || store.save_image(&captured)).await??;
-    }
-    store.upsert(captured, now_ms()).await?;
-    let evicted = store.trim().await?;
-    store.remove_image_files(&evicted);
-    Ok(())
-}
-
-/// 删除一条（含图片文件）；id 不存在 → `InvalidInput("记录不存在")`。不广播事件：发起者是前端自己。
-pub async fn delete_item(store: &ClipboardStore, id: i64) -> Result<(), AppError> {
-    let image_file = store.delete(id).await?;
-    store.remove_image_files(&Vec::from_iter(image_file));
-    Ok(())
 }
 
 /// 粘贴编排（Windows）：写回剪贴板 → 激活唤出前的前台窗口 → 收起面板 → 模拟 Ctrl+V。

@@ -1,21 +1,24 @@
 //! 剪贴板历史存储 `ClipboardStore`：SQLite 行（sqlx 运行时查询）+ `images/` 目录下的图片文件。
 //! 一条 image 记录 = 一行 + 原图 / 缩略图两个文件，两者的命名、读写、删除都在这一个文件里。
 //!
-//! 边界：不碰剪贴板、不发事件、不调系统 API；也不决定阻塞 IO 跑在哪个线程（`save_image` 是同步函数，由 `clipboard.rs::record`
-//! 放 `spawn_blocking`）。`text` 列的产出规则在父模块 `searchable_text`，这里只存取。
+//! 边界：不碰剪贴板、不发事件、不调系统 API；`text` 列的产出规则在父模块 `searchable_text`。
+//! 行与图片文件的生命周期必须整体串行：录入 / 删除入口在这里持锁编排（图片写入放 `spawn_blocking`），
+//! 低层 SQL 与文件变更不对外开放，避免调用者绕过锁或提前释放后再清理文件。
 //!
-//! 文件内两个 `impl` 块：前一个是 SQL（行 → DTO 整形），后一个是图片文件 IO。
+//! 文件内两个 `impl` 块：前一个是生命周期入口与 SQL（行 → DTO 整形），后一个是图片文件 IO。
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::types::Json;
+use tauri::async_runtime::Mutex;
 
 use super::{
     Captured, ClipboardFile, ClipboardItem, ClipboardKind, ListQuery, MAX_ITEMS, PREVIEW_CHARS,
-    file_name_of, searchable_text,
+    file_name_of, now_ms, searchable_text,
 };
 use crate::error::AppError;
 
@@ -27,6 +30,10 @@ const MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 pub struct ClipboardStore {
     pool: SqlitePool,
     images_dir: PathBuf,
+    /// 所有 Clone 共用一把异步锁；保护行 + 图片文件，不阻塞列表读取或收藏更新。
+    lifecycle: Arc<Mutex<()>>,
+    #[cfg(test)]
+    lifecycle_probe: Arc<tests::LifecycleProbe>,
 }
 
 /// `clipboard_items` 的一行，字段名 = 列名（`FromRow` 按名匹配）。
@@ -72,11 +79,61 @@ impl ClipboardStore {
             .connect_with(options)
             .await?;
         MIGRATOR.run(&pool).await.map_err(sqlx::Error::from)?;
-        Ok(Self { pool, images_dir })
+        Ok(Self {
+            pool,
+            images_dir,
+            lifecycle: Arc::default(),
+            #[cfg(test)]
+            lifecycle_probe: Arc::default(),
+        })
+    }
+
+    /// 完整录入：图片落盘 → 去重上浮 → 淘汰 → 清理图片；任一步失败原样返回。
+    /// 文本 / 文件录入同样可能淘汰图片，因此也必须持有生命周期锁。
+    pub(super) async fn record_captured(&self, captured: &Captured) -> Result<(), AppError> {
+        let guard = self.lifecycle.clone().lock_owned().await;
+        #[cfg(test)]
+        self.lifecycle_probe.checkpoint(tests::Stage::Started).await;
+        let _guard = if matches!(captured, Captured::Image { .. }) {
+            let (store, captured) = (self.clone(), captured.clone());
+            // guard 随阻塞任务往返：外层 future 被取消时，仍在写文件的任务不能提前放锁。
+            tauri::async_runtime::spawn_blocking(move || {
+                store.save_image(&captured)?;
+                Ok::<_, AppError>(guard)
+            })
+            .await??
+        } else {
+            guard
+        };
+        #[cfg(test)]
+        self.lifecycle_probe.checkpoint(tests::Stage::Saved).await;
+        self.upsert(captured, now_ms()).await?;
+        let evicted = self.trim().await?;
+        #[cfg(test)]
+        self.lifecycle_probe
+            .checkpoint(tests::Stage::BeforeCleanup)
+            .await;
+        self.remove_image_files(&evicted);
+        Ok(())
+    }
+
+    /// 完整删除：行删除后仍持锁清理图片，避免清理掉并发重新录入的同哈希图片。
+    /// id 不存在 → `InvalidInput("记录不存在")`。
+    pub(crate) async fn delete_item(&self, id: i64) -> Result<(), AppError> {
+        let _guard = self.lifecycle.lock().await;
+        #[cfg(test)]
+        self.lifecycle_probe.checkpoint(tests::Stage::Started).await;
+        let image_file = self.delete(id).await?;
+        #[cfg(test)]
+        self.lifecycle_probe
+            .checkpoint(tests::Stage::BeforeCleanup)
+            .await;
+        self.remove_image_files(&Vec::from_iter(image_file));
+        Ok(())
     }
 
     /// 写入一条快照：同 `hash` 已存在则只把 `copied_at` 上浮为 `now`（不新增、不改收藏），否则插入新行。
-    pub async fn upsert(&self, captured: &Captured, now: i64) -> Result<(), AppError> {
+    async fn upsert(&self, captured: &Captured, now: i64) -> Result<(), AppError> {
         let text = searchable_text(captured);
         let (image_file, width, height, files, size) = match captured {
             Captured::Text(t) => (None, None, None, None, t.len() as i64),
@@ -117,7 +174,7 @@ impl ClipboardStore {
     }
 
     /// 淘汰超出 `MAX_ITEMS` 的非收藏条目（按 `copied_at`、`id` 保留最新），返回被删图片条目的原图文件名。
-    pub async fn trim(&self) -> Result<Vec<String>, AppError> {
+    async fn trim(&self) -> Result<Vec<String>, AppError> {
         // RETURNING 单列用 query_scalar 直接解码为 Option<String>（非图片行为 NULL）
         let image_files = sqlx::query_scalar::<_, Option<String>>(
             "DELETE FROM clipboard_items WHERE favorite = 0 AND id NOT IN \
@@ -205,7 +262,7 @@ impl ClipboardStore {
     }
 
     /// 删除一条，返回其图片文件名（非图片为 `None`）。不存在 → `InvalidInput`。
-    pub async fn delete(&self, id: i64) -> Result<Option<String>, AppError> {
+    async fn delete(&self, id: i64) -> Result<Option<String>, AppError> {
         sqlx::query_scalar::<_, Option<String>>(
             "DELETE FROM clipboard_items WHERE id = ? RETURNING image_file",
         )
@@ -305,7 +362,7 @@ impl ClipboardStore {
 impl ClipboardStore {
     /// 把图片快照的原图与缩略图写进 `images_dir`；非图片快照直接返回。
     /// 同一像素内容再次复制时两个文件已存在，跳过重写。同步阻塞，调用方负责放 blocking 线程。
-    pub fn save_image(&self, captured: &Captured) -> Result<(), AppError> {
+    fn save_image(&self, captured: &Captured) -> Result<(), AppError> {
         let Captured::Image {
             png,
             thumb_png,
@@ -326,7 +383,7 @@ impl ClipboardStore {
 
     /// 删除一组图片条目对应的原图与缩略图（传入 `trim` / `delete` 返回的文件名）；
     /// 文件不存在视为成功，其它失败只 warn（行已删，文件残留无害）。
-    pub fn remove_image_files(&self, image_files: &[String]) {
+    fn remove_image_files(&self, image_files: &[String]) {
         for name in image_files {
             let (image_path, thumb_path) = self.image_paths(name);
             for path in [image_path, thumb_path] {
@@ -393,8 +450,216 @@ fn preview_of(text: &str) -> (String, u64, bool) {
 
 #[cfg(test)]
 mod tests {
+    use std::future::{Future, poll_fn};
+    use std::io::Cursor;
+    use std::pin::{Pin, pin};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::task::Poll;
+
+    use tokio::sync::oneshot;
+
     use super::*;
-    use crate::clipboard::ListCursor;
+    use crate::clipboard::{ListCursor, domain_hash};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(super) enum Stage {
+        Started,
+        Saved,
+        BeforeCleanup,
+    }
+
+    /// 只在测试编译：暂停真实编排的指定边界，并记录有多少操作已进入临界区。
+    #[derive(Debug, Default)]
+    pub(super) struct LifecycleProbe {
+        started: AtomicUsize,
+        pause: Mutex<Option<Pause>>,
+    }
+
+    #[derive(Debug)]
+    struct Pause {
+        stage: Stage,
+        entered: oneshot::Sender<()>,
+        resume: oneshot::Receiver<()>,
+    }
+
+    impl LifecycleProbe {
+        async fn arm(&self, stage: Stage) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+            let (entered_tx, entered_rx) = oneshot::channel();
+            let (resume_tx, resume_rx) = oneshot::channel();
+            *self.pause.lock().await = Some(Pause {
+                stage,
+                entered: entered_tx,
+                resume: resume_rx,
+            });
+            (entered_rx, resume_tx)
+        }
+
+        pub(super) async fn checkpoint(&self, stage: Stage) {
+            if stage == Stage::Started {
+                self.started.fetch_add(1, Ordering::SeqCst);
+            }
+            let pause = {
+                let mut slot = self.pause.lock().await;
+                if slot.as_ref().is_some_and(|pause| pause.stage == stage) {
+                    slot.take()
+                } else {
+                    None
+                }
+            };
+            if let Some(pause) = pause {
+                pause.entered.send(()).expect("测试应等待检查点");
+                pause.resume.await.expect("测试应释放检查点");
+            }
+        }
+    }
+
+    struct ImageDir(PathBuf);
+
+    impl ImageDir {
+        fn new() -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "z-tools-clipboard-lifecycle-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir(&path).expect("应创建独立临时图片目录");
+            Self(path)
+        }
+    }
+
+    impl Drop for ImageDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn png_snapshot() -> Captured {
+        let rgba = image::RgbaImage::from_fn(32, 16, |x, y| {
+            image::Rgba([x as u8 * 7, y as u8 * 13, 120, 255])
+        });
+        let mut png = Cursor::new(Vec::new());
+        rgba.write_to(&mut png, image::ImageFormat::Png)
+            .expect("应编码真实 PNG");
+        let png = png.into_inner();
+        Captured::Image {
+            thumb_png: png.clone(),
+            png,
+            width: rgba.width(),
+            height: rgba.height(),
+            rgba_hash: domain_hash(
+                ClipboardKind::Image,
+                &[
+                    &rgba.width().to_le_bytes(),
+                    &rgba.height().to_le_bytes(),
+                    rgba.as_raw(),
+                ],
+            ),
+        }
+    }
+
+    async fn pause_at<F: Future<Output = Result<(), AppError>>>(
+        mut operation: Pin<&mut F>,
+        entered: oneshot::Receiver<()>,
+    ) {
+        tokio::select! {
+            result = &mut operation => panic!("操作不应越过暂停点: {result:?}"),
+            result = entered => result.expect("操作应到达指定检查点"),
+        }
+    }
+
+    async fn assert_waiting<F: Future<Output = Result<(), AppError>>>(
+        store: &ClipboardStore,
+        mut operation: Pin<&mut F>,
+    ) {
+        assert!(store.lifecycle.try_lock().is_err(), "暂停期间必须持续持锁");
+        let started = store.lifecycle_probe.started.load(Ordering::SeqCst);
+        // 显式 poll 第二个生产 future：必须停在共享锁，不能仅凭任务尚未被调度推断串行。
+        poll_fn(|cx| {
+            assert!(operation.as_mut().poll(cx).is_pending(), "并发操作应等待");
+            Poll::Ready(())
+        })
+        .await;
+        assert_eq!(
+            store.lifecycle_probe.started.load(Ordering::SeqCst),
+            started,
+            "并发操作不能提前进入保存 / SQL / 清理阶段"
+        );
+    }
+
+    async fn assert_image_consistent(store: &ClipboardStore, captured: &Captured) -> i64 {
+        let items = store
+            .list(&ListQuery {
+                kind: Some(ClipboardKind::Image),
+                ..query(10)
+            })
+            .await
+            .expect("应读取图片列表");
+        assert_eq!(items.len(), 1, "同一哈希只能有一行");
+        let ClipboardItem::Image {
+            id,
+            image_path,
+            thumb_path,
+            ..
+        } = &items[0]
+        else {
+            panic!("应为图片条目");
+        };
+        let Captured::Image {
+            png,
+            thumb_png,
+            width,
+            height,
+            ..
+        } = captured
+        else {
+            panic!("应为图片快照");
+        };
+        for (path, expected) in [(image_path, png), (thumb_path, thumb_png)] {
+            let bytes = std::fs::read(path).expect("数据库引用的图片必须存在");
+            assert_eq!(&bytes, expected);
+            let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+                .expect("原图与缩略图必须是完整 PNG");
+            assert_eq!((decoded.width(), decoded.height()), (*width, *height));
+        }
+        let mut expected = captured.clone();
+        if let Captured::Image { thumb_png, .. } = &mut expected {
+            thumb_png.clear();
+        }
+        assert_eq!(
+            store
+                .get_captured(*id)
+                .await
+                .expect("应可读取用于粘贴的图片"),
+            expected
+        );
+        assert_eq!(
+            std::fs::read_dir(&store.images_dir)
+                .expect("应读取图片目录")
+                .count(),
+            2,
+            "只应留下原图与缩略图，不留临时文件"
+        );
+        *id
+    }
+
+    async fn seed_old_image_at_capacity(store: &ClipboardStore, captured: &Captured) -> i64 {
+        store.record_captured(captured).await.expect("应录入图片");
+        let id = assert_image_consistent(store, captured).await;
+        // 固定时间排序，避免依赖墙上时钟或用 sleep 等待毫秒变化；低层 SQL 仅用于造夹具。
+        sqlx::query("UPDATE clipboard_items SET copied_at = 0 WHERE id = ?")
+            .bind(id)
+            .execute(&store.pool)
+            .await
+            .expect("应固定旧图片时间");
+        for i in 1..MAX_ITEMS {
+            store
+                .upsert(&text(&format!("seed-{i}")), i)
+                .await
+                .expect("应填满容量");
+        }
+        id
+    }
 
     /// 内存库：连接数固定为 1 且永不回收，否则每个连接各有一份独立的 `:memory:` 数据
     async fn memory_store() -> ClipboardStore {
@@ -409,6 +674,8 @@ mod tests {
         ClipboardStore {
             pool,
             images_dir: PathBuf::from("/images"),
+            lifecycle: Arc::default(),
+            lifecycle_probe: Arc::default(),
         }
     }
 
@@ -471,6 +738,158 @@ mod tests {
             .fetch_one(&store.pool)
             .await
             .expect("计数应成功")
+    }
+
+    #[tokio::test]
+    async fn lifecycle_recapture_waits_for_delete_cleanup() {
+        let dir = ImageDir::new();
+        let store = ClipboardStore {
+            images_dir: dir.0.clone(),
+            ..memory_store().await
+        };
+        let captured = png_snapshot();
+        store.record_captured(&captured).await.expect("应录入图片");
+        let id = assert_image_consistent(&store, &captured).await;
+        let clone = store.clone();
+        let (entered, resume) = store.lifecycle_probe.arm(Stage::BeforeCleanup).await;
+        let mut deleting = pin!(store.delete_item(id));
+        pause_at(deleting.as_mut(), entered).await;
+        assert!(all(&store).await.is_empty(), "行已删，图片尚未清理");
+        assert!(
+            store
+                .image_paths(&image_file_name(&captured.hash()))
+                .0
+                .exists()
+        );
+        let mut recording = pin!(clone.record_captured(&captured));
+        assert_waiting(&store, recording.as_mut()).await;
+        resume.send(()).expect("应允许删除完成清理");
+        deleting.await.expect("删除应成功");
+        assert_eq!(std::fs::read_dir(&dir.0).expect("应读取目录").count(), 0);
+        recording.await.expect("重新录入应成功");
+        assert_ne!(
+            assert_image_consistent(&store, &captured).await,
+            id,
+            "删除后重新录入应生成新行且重建两个图片文件"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_recapture_waits_for_text_eviction_cleanup() {
+        let dir = ImageDir::new();
+        let store = ClipboardStore {
+            images_dir: dir.0.clone(),
+            ..memory_store().await
+        };
+        let captured = png_snapshot();
+        let id = seed_old_image_at_capacity(&store, &captured).await;
+        let clone = store.clone();
+        let new_text = text("触发图片淘汰");
+        let (entered, resume) = store.lifecycle_probe.arm(Stage::BeforeCleanup).await;
+        let mut evicting = pin!(store.record_captured(&new_text));
+        pause_at(evicting.as_mut(), entered).await;
+        assert!(store.fetch_row(id).await.is_err(), "图片行已被淘汰");
+        assert!(
+            store
+                .image_paths(&image_file_name(&captured.hash()))
+                .0
+                .exists()
+        );
+        let mut recording = pin!(clone.record_captured(&captured));
+        assert_waiting(&store, recording.as_mut()).await;
+        resume.send(()).expect("应允许淘汰完成清理");
+        evicting.await.expect("淘汰应成功");
+        assert_eq!(std::fs::read_dir(&dir.0).expect("应读取目录").count(), 0);
+        recording.await.expect("重新录入应成功");
+        assert_ne!(assert_image_consistent(&store, &captured).await, id);
+        assert_eq!(count(&store, false).await, MAX_ITEMS);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_delete_waits_for_image_save_and_upsert() {
+        let dir = ImageDir::new();
+        let store = ClipboardStore {
+            images_dir: dir.0.clone(),
+            ..memory_store().await
+        };
+        let captured = png_snapshot();
+        store.record_captured(&captured).await.expect("应录入图片");
+        let id = assert_image_consistent(&store, &captured).await;
+        store.set_favorite(id, true).await.expect("应收藏图片");
+        let clone = store.clone();
+        let (entered, resume) = store.lifecycle_probe.arm(Stage::Saved).await;
+        // 文件已存在，真实 save_image 会走跳过重写分支；不能在 upsert 前被删除。
+        let mut recording = pin!(store.record_captured(&captured));
+        pause_at(recording.as_mut(), entered).await;
+        let mut deleting = pin!(clone.delete_item(id));
+        assert_waiting(&store, deleting.as_mut()).await;
+        resume.send(()).expect("应允许录入完成");
+        recording.await.expect("重新录入应成功");
+        assert_eq!(assert_image_consistent(&store, &captured).await, id);
+        assert!(
+            store.fetch_row(id).await.expect("行应存在").favorite,
+            "上浮不能改变收藏"
+        );
+        deleting.await.expect("删除应成功");
+        assert!(all(&store).await.is_empty());
+        assert_eq!(std::fs::read_dir(&dir.0).expect("应读取目录").count(), 0);
+        assert_eq!(
+            store
+                .delete_item(id)
+                .await
+                .expect_err("重复删除应报错")
+                .to_string(),
+            "参数错误: 记录不存在"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_files_eviction_waits_for_image_save_and_upsert() {
+        let dir = ImageDir::new();
+        let store = ClipboardStore {
+            images_dir: dir.0.clone(),
+            ..memory_store().await
+        };
+        let captured = png_snapshot();
+        let id = seed_old_image_at_capacity(&store, &captured).await;
+        let clone = store.clone();
+        let new_files = files(&["/lifecycle/new-file.txt"]);
+        let (entered, resume) = store.lifecycle_probe.arm(Stage::Saved).await;
+        let mut recording = pin!(store.record_captured(&captured));
+        pause_at(recording.as_mut(), entered).await;
+        let mut evicting = pin!(clone.record_captured(&new_files));
+        assert_waiting(&store, evicting.as_mut()).await;
+        resume.send(()).expect("应允许图片上浮");
+        recording.await.expect("重新录入应成功");
+        evicting.await.expect("文件录入与淘汰应成功");
+        assert_eq!(
+            assert_image_consistent(&store, &captured).await,
+            id,
+            "图片必须先上浮，后续淘汰应删除旧文本而非图片"
+        );
+        assert_eq!(count(&store, false).await, MAX_ITEMS);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_duplicate_images_wait_for_save_and_share_one_row() {
+        let dir = ImageDir::new();
+        let store = ClipboardStore {
+            images_dir: dir.0.clone(),
+            ..memory_store().await
+        };
+        let captured = png_snapshot();
+        let clone = store.clone();
+        let (entered, resume) = store.lifecycle_probe.arm(Stage::Saved).await;
+        let mut first = pin!(store.record_captured(&captured));
+        pause_at(first.as_mut(), entered).await;
+        assert!(all(&store).await.is_empty(), "首次保存文件后尚未写入行");
+        let mut second = pin!(clone.record_captured(&captured));
+        assert_waiting(&store, second.as_mut()).await;
+        resume.send(()).expect("应允许首次录入完成");
+        first.await.expect("首次录入应成功");
+        let id = assert_image_consistent(&store, &captured).await;
+        second.await.expect("重复录入应成功");
+        assert_eq!(assert_image_consistent(&store, &captured).await, id);
     }
 
     #[tokio::test]

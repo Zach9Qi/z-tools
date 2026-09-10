@@ -51,7 +51,7 @@ pub async fn delete_clipboard_item(
     store: State<'_, ClipboardStore>,
     id: i64,
 ) -> Result<(), AppError> {
-    clipboard::delete_item(&store, id).await
+    store.delete_item(id).await
 }
 
 /// 设置 / 取消收藏；只改标记不动 `copied_at`。不存在返回参数错误。
