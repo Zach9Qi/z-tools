@@ -21,6 +21,7 @@ const {
   selected,
   expandedId,
   loading,
+  canLoadMore,
   error,
   loadMore,
   paste,
@@ -63,12 +64,12 @@ onMounted(() => {
 });
 onUnmounted(() => observer?.disconnect());
 
-// IO 只在「进入 / 离开」时回调:一页加载完后哨兵若仍在视口内(行很矮 / 本地删到不满一屏)不会再触发,
-// 所以每次 loading 结束后等 DOM 更新再补查一次;loadMore 自己会校验 hasMore
-watch(loading, (isLoading) => {
-  if (isLoading) return;
+// IO 只在「进入 / 离开」时回调:成功且还有下一页时等 DOM 更新补查哨兵。
+// nextTick 内复查分页条件,避免排队期间已有新请求在途、失败或到底。
+watch(canLoadMore, (canLoad) => {
+  if (!canLoad) return;
   void nextTick(() => {
-    if (sentinelInView()) void loadMore();
+    if (canLoadMore.value && sentinelInView()) void loadMore();
   });
 });
 

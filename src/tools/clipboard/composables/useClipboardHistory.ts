@@ -33,10 +33,14 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
   const selectedIndex = ref(0);
   /** 当前展开的条目 id;与 selectedIndex 独立,同时只有一项展开;refresh 时清空 */
   const expandedId = ref<number | null>(null);
-  /** 是否有一次 list 请求在途(refresh 或 loadMore) */
-  const loading = ref(false);
+  /** 独立记录列表请求状态;失败后暂停分页,不受收藏等命令清空 error 影响 */
+  const loadState = ref<"idle" | "loading" | "success" | "error">("idle");
+  /** 是否有一次 list 请求在途(refresh 或 loadMore),保留页面的加载提示入口 */
+  const loading = computed(() => loadState.value === "loading");
   /** 上一页是否满页;只在响应到达时写,本地增删不推它 */
   const hasMore = ref(false);
+  /** 是否允许继续分页;页面补查与分页入口共用,不向外暴露内部请求状态 */
+  const canLoadMore = computed(() => loadState.value === "success" && hasMore.value);
   /** 最近一次命令失败的文案(Rust 已是完整中文句子);下一次成功清空 */
   const error = ref("");
 
@@ -54,11 +58,11 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
 
   /**
    * 拉一页。`before` 为空 = 从头拉并替换 items;否则追加。
-   * 只有序号仍是最新的响应才会写 items / hasMore / loading,过期响应整体忽略(连 loading 也不动,由最新请求收尾)。
+   * 只有序号仍是最新的响应才会写 items / hasMore / loadState,过期响应整体忽略,由最新请求收尾。
    */
   async function load(before: ListCursor | undefined): Promise<void> {
     const seq = ++requestSeq;
-    loading.value = true;
+    loadState.value = "loading";
     try {
       const page = await listClipboardItems({
         kind: kind.value ?? undefined,
@@ -72,12 +76,12 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
       hasMore.value = page.length >= PAGE_SIZE;
       error.value = "";
       clampSelection();
+      loadState.value = "success";
     } catch (e) {
       if (seq !== requestSeq) return;
       console.error("拉取剪贴板历史失败:", e);
       error.value = String(e);
-    } finally {
-      if (seq === requestSeq) loading.value = false;
+      loadState.value = "error";
     }
   }
 
@@ -89,10 +93,10 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
 
   /**
    * 追加下一页。游标不存状态,从当前末条现取:本地删掉末条后自动退到新末条,被删行已不在库里不会重复。
-   * items 为空退化为 refresh。
+   * 只有列表加载成功才允许追加;失败后等待正常 refresh 恢复。items 为空退化为 refresh。
    */
   function loadMore(): Promise<void> {
-    if (!hasMore.value || loading.value) return Promise.resolve();
+    if (!canLoadMore.value) return Promise.resolve();
     const last = items.value[items.value.length - 1];
     if (last === undefined) return refresh();
     return load({ copiedAt: last.copiedAt, id: last.id });
@@ -184,7 +188,7 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
     if (length === 0) return;
     const next = selectedIndex.value + delta;
     if (next >= length) {
-      if (hasMore.value) void loadMore();
+      if (canLoadMore.value) void loadMore();
       return;
     }
     if (next < 0) return;
@@ -222,8 +226,9 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
   onUnmounted(() => {
     clearTimeout(changedTimer);
     clearTimeout(queryTimer);
-    // 让在途响应到达时被当作过期丢弃
+    // 丢弃在途响应,并阻止已排队的哨兵回调在卸载后继续分页
     requestSeq++;
+    loadState.value = "idle";
   });
 
   return {
@@ -234,6 +239,7 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
     selected,
     expandedId,
     loading,
+    canLoadMore,
     hasMore,
     error,
     refresh,
