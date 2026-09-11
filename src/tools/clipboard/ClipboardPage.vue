@@ -32,7 +32,6 @@ const {
   cycleKind,
   toggleExpanded,
   moveSelection,
-  select,
 } = useClipboardHistory(() => props.query);
 
 /** 列表滚动容器;IntersectionObserver 的 root */
@@ -140,7 +139,6 @@ useKeymap([
           :item="item"
           :selected="index === selectedIndex"
           :expanded="item.id === expandedId"
-          @select="select(index)"
           @paste="paste(item.id)"
           @toggle-favorite="toggleFavorite(item.id)"
           @toggle-expanded="toggleExpanded(item.id)"

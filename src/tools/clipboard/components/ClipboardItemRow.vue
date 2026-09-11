@@ -14,15 +14,13 @@ import ClipboardItemDetail from "./ClipboardItemDetail.vue";
 
 const { item, selected, expanded } = defineProps<{
   item: ClipboardItem;
-  /** 是否为当前键盘 / 鼠标选中项;高亮覆盖整行(含详情区) */
+  /** 是否为当前键盘选中项;高亮覆盖整行(含详情区) */
   selected: boolean;
   /** 是否展开详情;与 selected 独立 */
   expanded: boolean;
 }>();
 
 const emit = defineEmits<{
-  /** 鼠标移入请求选中,让 hover 与键盘选中共用同一高亮 */
-  select: [];
   /** 点击行主体 = 粘贴 */
   paste: [];
   toggleFavorite: [];
@@ -57,13 +55,12 @@ watch(
 </script>
 
 <template>
-  <!-- 选中态用 accent 叠加底覆盖整个 li(含展开的详情区);hover 走同一组类。
+  <!-- 整行高亮只由 selected 驱动,鼠标悬停 / 移动不改变选择。
        行主体是一个 <button>(点击 = 粘贴),星标 / chevron 是它的兄弟按钮而不是子元素:button 不能嵌套 -->
   <li
     ref="rootRef"
-    class="rounded-lg transition-colors hover:bg-accent hover:text-accent-foreground"
+    class="rounded-lg transition-colors"
     :class="selected && 'bg-accent text-accent-foreground'"
-    @mouseenter="emit('select')"
   >
     <div
       class="flex items-start gap-2 px-2 py-2"
