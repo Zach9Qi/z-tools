@@ -24,7 +24,7 @@ pub enum AppError {
     #[error("剪贴板错误: {0}")]
     Clipboard(String),
 
-    /// 当前操作系统没有实现该能力（如非 Windows 上的剪贴板粘贴），前端直接展示，不重试
+    /// 当前操作系统没有实现该能力（如尚未支持的平台上的剪贴板粘贴），前端直接展示，不重试
     #[error("当前平台暂不支持: {0}")]
     Unsupported(String),
 }

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验证后端口径、unsafe 注释、测试覆盖与 clippy -D warnings 门禁"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "验证平台代码分层无非法跨层或 cfg 散落"}
+{"file": ".trellis/spec/guides/project-conventions.md", "reason": "验证多平台 CI 兼容性与代码注释语言规范"}

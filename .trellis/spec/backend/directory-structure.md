@@ -23,15 +23,17 @@ src-tauri/
     │                       # Builder 用 .build()?.run(|app, event| …) 在 RunEvent::Exit 停监听;不放业务逻辑
     ├── error.rs            # 全局统一 AppError;以 `pub mod error` 导出(见 error-handling.md §2)
     ├── launcher.rs         # 领域层:启动器窗口 show / hide / toggle / 失焦 / quit、事件常量、anchor_position 纯函数(含测试);
-    │                       # `#[cfg(windows)]` PreviousForeground 托管状态 + remember_foreground / previous_foreground / activate_window
+    │                       # `#[cfg(any(windows, target_os = "linux"))]` PreviousForeground 托管状态 + remember_foreground / previous_foreground / activate_window
     ├── launcher/
-    │   └── windows.rs      # 平台钩子:`#[cfg(windows)]` SetWindowSubclass 拦 SC_KEYMENU;current_foreground / is_taskbar / activate
+    │   ├── windows.rs      # 平台钩子:`#[cfg(windows)]` SetWindowSubclass 拦 SC_KEYMENU;current_foreground / is_taskbar / activate
+    │   └── linux.rs        # 平台钩子:`#[cfg(target_os = "linux")]` EWMH _NET_ACTIVE_WINDOW 查询与激活;无操作钩子
     ├── clipboard.rs        # 领域层(pub mod):常量、ClipboardKind / ClipboardItem / ListQuery DTO、Captured、`pub use store::ClipboardStore`、
     │                       # domain_hash / searchable_text、record()(唯一 emit clipboard://changed 处)、paste() 编排、delete_item
     ├── clipboard/
     │   ├── store.rs        # 存储层(pub mod):ClipboardStore 定义 + 全部 impl(sqlx SQL、行 → DTO 整形、images/ 图片文件读写删);内存库 #[tokio::test]
     │   ├── backend.rs      # 跨平台读写(pub mod,arboard):read_snapshot / write、阈值 / 像素哈希 / 缩略图纯函数(含测试);无 cfg
-    │   └── windows.rs      # 平台专属:`#[cfg(windows)]` 消息窗口监听 run_monitor / stop_monitor、SendInput send_paste、ClipboardWatcher 状态
+    │   ├── windows.rs      # 平台专属:`#[cfg(windows)]` 消息窗口监听 run_monitor / stop_monitor、SendInput send_paste、ClipboardWatcher 状态
+    │   └── linux.rs        # 平台专属:`#[cfg(target_os = "linux")]` x11rb XFixes 监听 run_monitor / stop_monitor、XTest send_paste、ClipboardWatcher 状态与 Wayland 降级
     ├── tray.rs             # 托盘装配:菜单 / 点击事件 → launcher 领域函数
     ├── commands.rs         # 命令层模块根:pub mod <domain>;
     └── commands/

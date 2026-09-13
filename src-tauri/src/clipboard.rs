@@ -3,12 +3,13 @@
 //!
 //! 边界：
 //! - 历史存储（`ClipboardStore`：SQLite 行 + `images/` 下的图片文件）整体在 `clipboard/store.rs`，这里只 `pub use`；
-//!   剪贴板读写（arboard，跨平台）在 `clipboard/backend.rs`；监听消息窗口与 `SendInput` 在 `clipboard/windows.rs`（仅 Windows 编译）。
+//!   剪贴板读写（arboard，跨平台）在 `clipboard/backend.rs`；监听与 `SendInput` / XTest 按平台拆分
+//!   （`clipboard/windows.rs`、`clipboard/linux.rs`）。
 //! - 本模块不处理 IPC 参数校验（命令层的事）；`clipboard://changed` 事件**只**由这里的 `record()` 发出（携带落库后的条目），
 //!   命令层的删除 / 收藏由前端自己更新本地列表，不再广播。
 //!
 //! 可见性：本模块与 `backend` / `store` 子模块都是 `pub`（同 `pub mod error` 先例）——跨平台的读写 / 存储层是 crate 的公开契约，
-//! 监听与粘贴按平台接入；若为私有，非 Windows 下 `record` / `backend::*` 等只被 `windows.rs` 引用的项会被 dead_code 在 `-D warnings` 下拦下。
+//! 监听与粘贴按平台接入；若为私有，非桌面平台下 `record` / `backend::*` 等只被平台文件引用的项会被 dead_code 在 `-D warnings` 下拦下。
 
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -18,10 +19,17 @@ use tauri::{AppHandle, Emitter, Runtime};
 use crate::error::AppError;
 
 pub mod backend;
+#[cfg(target_os = "linux")]
+mod linux;
 pub mod store;
 #[cfg(windows)]
 mod windows;
 
+#[cfg(target_os = "linux")]
+pub use linux::{
+    ClipboardWatcher, ensure_keepalive, release_keepalive, run_monitor, stop_monitor,
+    write_to_clipboard,
+};
 pub use store::ClipboardStore;
 #[cfg(windows)]
 pub use windows::{ClipboardWatcher, run_monitor, stop_monitor};
@@ -239,21 +247,21 @@ pub async fn record<R: Runtime>(app: &AppHandle<R>, store: &ClipboardStore, capt
     }
 }
 
-/// 粘贴编排（Windows）：写回剪贴板 → 激活唤出前的前台窗口 → 收起面板 → 模拟 Ctrl+V。
+/// 粘贴编排（Windows / Linux）：写回剪贴板 → 激活唤出前的前台窗口 → 收起面板 → 模拟 Ctrl+V。
 ///
 /// 兜底：没有前台记录 / 窗口已关闭 / 激活失败时只写回并收起，仍返回 `Ok`（内容已在剪贴板，用户手动粘贴即可）。
-/// 写回后监听器会再捕获同一内容并上浮，是期望行为。
-#[cfg(windows)]
+/// Linux 纯 Wayland 下按键模拟会安全降级为仅写回。写回后监听器会再捕获同一内容并上浮，是期望行为。
+#[cfg(any(windows, target_os = "linux"))]
 pub async fn paste<R: Runtime>(
     app: &AppHandle<R>,
     store: &ClipboardStore,
     id: i64,
 ) -> Result<(), AppError> {
     let captured = store.get_captured(id).await?;
-    // arboard::Clipboard 非 Send，在 blocking 线程的同步块内用完
-    tauri::async_runtime::spawn_blocking(move || backend::write(&captured)).await??;
+    // 写回剪贴板：Windows 走 arboard，Linux 优先 arboard 并带常驻保活、wl-copy 兜底与 Wayland 明确报错
+    tauri::async_runtime::spawn_blocking(move || platform_write(&captured)).await??;
 
-    // 必须在 hide 之前切前台：hide 后本进程可能失去前台进程资格，SetForegroundWindow 会静默失败
+    // 必须在 hide 之前切前台：hide 后本进程可能失去前台进程资格，激活 API 会静默失败
     let activated = crate::launcher::previous_foreground(app).is_some_and(|hwnd| {
         let ok = crate::launcher::activate_window(hwnd);
         if !ok {
@@ -267,7 +275,7 @@ pub async fn paste<R: Runtime>(
         // 等目标窗口真正拿到焦点再按键；失败只 warn（内容已在剪贴板）
         tauri::async_runtime::spawn_blocking(|| {
             std::thread::sleep(std::time::Duration::from_millis(50));
-            if let Err(e) = windows::send_paste() {
+            if let Err(e) = platform_send_paste() {
                 log::warn!("模拟 Ctrl+V 失败: {e}");
             }
         });
@@ -275,8 +283,28 @@ pub async fn paste<R: Runtime>(
     Ok(())
 }
 
-/// 非 Windows 平台尚未实现监听与粘贴模拟，明确报错而不是静默 no-op。
-#[cfg(not(windows))]
+#[cfg(windows)]
+fn platform_write(captured: &Captured) -> Result<(), AppError> {
+    backend::write(captured)
+}
+
+#[cfg(target_os = "linux")]
+fn platform_write(captured: &Captured) -> Result<(), AppError> {
+    linux::write_to_clipboard(captured)
+}
+
+#[cfg(windows)]
+fn platform_send_paste() -> Result<(), AppError> {
+    windows::send_paste()
+}
+
+#[cfg(target_os = "linux")]
+fn platform_send_paste() -> Result<(), AppError> {
+    linux::send_paste()
+}
+
+/// 尚未实现监听与粘贴模拟的平台，明确报错而不是静默 no-op。
+#[cfg(not(any(windows, target_os = "linux")))]
 pub async fn paste<R: Runtime>(
     _app: &AppHandle<R>,
     _store: &ClipboardStore,

@@ -1,7 +1,7 @@
 //! 剪贴板的 Windows 平台层：消息窗口监听 `WM_CLIPBOARDUPDATE`、停止监听、`SendInput` 模拟 Ctrl+V。
 //!
 //! 只由父模块 `clipboard.rs` 以 `#[cfg(windows)]` 引入。读写剪贴板本身在跨平台的 `backend.rs`，
-//! 这里只负责 arboard 不提供的两件事：变化通知与按键模拟。后续 macOS / Linux 各补一份同签名文件即可。
+//! 这里只负责 arboard 不提供的两件事：变化通知与按键模拟。Linux 见同目录 `linux.rs`；后续 macOS 再补一份同签名文件。
 
 use std::sync::atomic::{AtomicIsize, Ordering};
 
@@ -134,7 +134,7 @@ pub fn send_paste() -> Result<(), AppError> {
     if sent as usize == inputs.len() {
         Ok(())
     } else {
-        let reason = windows::core::Error::from_win32();
+        let reason = windows::core::Error::from_thread();
         Err(AppError::Clipboard(format!(
             "SendInput 只注入了 {sent}/{} 个按键事件: {reason}",
             inputs.len()
@@ -173,7 +173,7 @@ fn create_message_window() -> Result<HWND, AppError> {
     // 安全：class 是完整初始化的栈上结构，指针仅在调用期间使用
     let atom = unsafe { RegisterClassW(&class) };
     if atom == 0 {
-        let reason = windows::core::Error::from_win32();
+        let reason = windows::core::Error::from_thread();
         return Err(AppError::Clipboard(format!("注册监听窗口类失败: {reason}")));
     }
     // 安全：类名已注册；HWND_MESSAGE 父句柄创建仅收消息的窗口；其余参数为空 / 零值

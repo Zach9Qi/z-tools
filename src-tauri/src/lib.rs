@@ -4,7 +4,7 @@
 //! 拆成 lib + bin 是为了让命令与错误类型能被单测与集成测试复用。
 
 // clipboard 公开导出（同 error）：跨平台的读写 / 存储层是 crate 契约，监听与粘贴按平台接入；
-// 私有的话非 Windows 下只被 windows.rs 引用的项会被 dead_code 在 -D warnings 下拦下（理由见 clipboard.rs 模块文档）
+// 私有的话非桌面平台下只被平台文件引用的项会被 dead_code 在 -D warnings 下拦下（理由见 clipboard.rs 模块文档）
 pub mod clipboard;
 mod commands;
 // error 模块公开导出：AppError 是本 crate 的错误契约，供命令与集成测试使用
@@ -58,14 +58,14 @@ pub fn run() {
         // 用 build + run：Ready 时消费启动期唤回请求，Exit 时停掉剪贴板监听，覆盖托盘退出等所有退出路径。
         .build(tauri::generate_context!())
         .expect("启动应用失败")
-        // 两个参数带下划线：桌面端处理 Ready，Windows 还处理 Exit，移动端未使用。
+        // 两个参数带下划线：桌面端处理 Ready，Windows / Linux 还处理 Exit，移动端未使用。
         .run(|_app, _event| {
             #[cfg(desktop)]
             if let tauri::RunEvent::Ready = _event {
                 // Tauri 在完整 setup（含 init_hidden）之后才通知 Ready，避免唤回被初始隐藏覆盖。
                 launcher::finish_startup(_app);
             }
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             if let tauri::RunEvent::Exit = _event {
                 use tauri::Manager;
                 if let Some(hwnd) = _app
@@ -74,11 +74,13 @@ pub fn run() {
                 {
                     clipboard::stop_monitor(hwnd);
                 }
+                #[cfg(target_os = "linux")]
+                clipboard::release_keepalive();
             }
         });
 }
 
-/// 剪贴板历史装配：建目录、开库迁移、托管 `ClipboardStore`；Windows 上再启动监听线程。
+/// 剪贴板历史装配：建目录、开库迁移、托管 `ClipboardStore`；Windows / Linux 上再启动监听线程。
 ///
 /// 落盘统一在 `app_local_data_dir()/clipboard/`（Windows 为 `%LOCALAPPDATA%\<identifier>\clipboard\`，
 /// 与 WebView2 / 日志同目录，删一个目录即可完整清理）；**不用** `app_data_dir()`（Roaming）。
@@ -97,9 +99,12 @@ fn setup_clipboard(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         tauri::async_runtime::block_on(clipboard::ClipboardStore::open(&db_path, images_dir))?;
     app.manage(store);
 
-    #[cfg(windows)]
+    #[cfg(target_os = "linux")]
+    clipboard::ensure_keepalive();
+
+    #[cfg(any(windows, target_os = "linux"))]
     {
-        // 监听线程必须在自己的线程上跑阻塞的 GetMessageW 循环；句柄写进 ClipboardWatcher 供退出时停止
+        // 监听线程必须在自己的线程上跑阻塞事件循环；句柄写进 ClipboardWatcher 供退出时停止
         app.manage(clipboard::ClipboardWatcher::default());
         let handle = app.handle().clone();
         tauri::async_runtime::spawn_blocking(move || clipboard::run_monitor(handle));
@@ -138,11 +143,11 @@ fn setup_desktop(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     //    CloseRequested，拦成「隐藏」而不是退出。真正退出走托盘 → launcher::quit：
     //    destroy 主窗口（不能 close，会被上面拦住），Destroyed 后再 app.exit(0)，
     //    否则 Windows 上 WebView2 注销 Chrome_WidgetWin_0 会报 Error 1412。
-    //    Windows 上还要托管 PreviousForeground：show() 在抢焦点前记录前台窗口，剪贴板粘贴时还回去
-    #[cfg(windows)]
+    //    Windows / Linux 上还要托管 PreviousForeground：show() 在抢焦点前记录前台窗口，剪贴板粘贴时还回去
+    #[cfg(any(windows, target_os = "linux"))]
     app.manage(launcher::PreviousForeground::default());
     if let Some(window) = app.get_webview_window(launcher::MAIN_WINDOW) {
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         launcher::install_platform_hooks(&window);
         let handle = app.handle().clone();
         window.on_window_event(move |event| match event {

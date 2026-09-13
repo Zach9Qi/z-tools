@@ -35,7 +35,7 @@ tauri-plugin-log = "2.9.1"
 tauri-plugin-global-shortcut = "2"
 # 剪贴板读写（跨平台，clipboard/backend.rs）：文本 / 图片 / 文件列表三平台一致 API，1Password 维护、生态主流；
 # Windows 侧只依赖 windows-sys，不会引入第二份 windows crate。不选 clipboard-rs（小众且依赖 windows 0.59 与本仓库冲突）、
-# 不选官方 clipboard-manager 插件（无文件列表、无监听）。监听与粘贴模拟 arboard 不提供，按平台自写（clipboard/windows.rs）
+# 不选官方 clipboard-manager 插件（无文件列表、无监听）。监听与粘贴模拟 arboard 不提供，按平台自写（clipboard/windows.rs、clipboard/linux.rs）
 arboard = "3.6"
 # 剪贴板历史持久化：SQLite（bundled libsqlite3-sys）。只用运行时 sqlx::query*，不用 query! 宏，避免编译期依赖 DATABASE_URL；
 # runtime-tokio 对齐 tauri 内置的 tokio 运行时；migrate 让迁移脚本编译期内嵌（sqlx::migrate!，该宏由 sqlx-macros 提供，
@@ -63,7 +63,7 @@ tauri-plugin-single-instance = "2"
 # - Win32_System_DataExchange：AddClipboardFormatListener / GetClipboardSequenceNumber 监听剪贴板变化
 # - Win32_System_LibraryLoader：GetModuleHandleW 取当前模块句柄以注册窗口类
 # - Win32_UI_Input_KeyboardAndMouse：SendInput 模拟 Ctrl+V 粘贴
-windows = { version = "0.61", features = [
+windows = { version = "0.62.2", features = [
   "Win32_Foundation",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
@@ -72,3 +72,10 @@ windows = { version = "0.61", features = [
   "Win32_System_LibraryLoader",
   "Win32_UI_Input_KeyboardAndMouse",
 ] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# 开启 wayland-data-control 特性：让 arboard 在 Wayland 环境（支持 wlr-data-control 协议的合成器如 Sway/Hyprland）下能原生读写剪贴板
+arboard = { version = "3.6", features = ["wayland-data-control"] }
+# 纯 Rust X11 协议客户端，不依赖 libX11 / libXtst 等 C 头文件，便于交叉编译；
+# allow-unsafe-code：xfixes / xtest 扩展内部需要；xfixes：剪贴板 Selection 变化通知；xtest：模拟 Ctrl+V
+x11rb = { version = "0.14.0", default-features = false, features = ["allow-unsafe-code", "xfixes", "xtest"] }

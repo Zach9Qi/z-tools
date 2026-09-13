@@ -36,13 +36,8 @@ pub fn is_cursor_on_notification_chevron(x: f64, y: f64) -> bool {
         }
 
         // 通知区域窗口
-        let tray_notify = FindWindowExW(
-            Some(shell_tray),
-            None,
-            w!("TrayNotifyWnd"),
-            None,
-        )
-        .unwrap_or_default();
+        let tray_notify =
+            FindWindowExW(Some(shell_tray), None, w!("TrayNotifyWnd"), None).unwrap_or_default();
 
         if tray_notify.is_invalid() {
             return false;
