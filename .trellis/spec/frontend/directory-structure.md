@@ -33,7 +33,7 @@ src/
 │   ├── icons.ts           # lucide 图标名 → 组件的手工映射表;只登记经 ToolItem.icon 使用的(现为 clipboard + 回退 puzzle)
 │   └── clipboard/         # 剪贴板工具领域包(唯一的工具,也是新工具的样板):
 │       ├── index.ts                 # ViewToolModule clipboardTool(id "clipboard")
-│       ├── ClipboardPage.vue        # 单根工具页:Tabs + 列表 + 哨兵 + useKeymap 登记
+│       ├── ClipboardPage.vue        # 单根工具页:Tabs + 滚动列表(距底翻页 / 重置回顶)+ useKeymap 登记
 │       ├── components/              # ClipboardTabs / ClipboardItemRow / ClipboardItemDetail
 │       ├── composables/             # useClipboardHistory(页面状态拥有者)
 │       └── lib/                     # format.ts + format.test.ts(纯函数)

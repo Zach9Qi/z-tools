@@ -5,7 +5,7 @@
 > | 类别 | 现例 | 位置 |
 > |---|---|---|
 > | 托管状态 | `ClipboardStore { pool: SqlitePool, images_dir: PathBuf }`;`#[cfg(windows)] ClipboardWatcher { hwnd: AtomicIsize }`;`#[cfg(windows)] PreviousForeground(AtomicIsize)` | `clipboard.rs` / `clipboard/windows.rs` / `launcher.rs`,均在 `lib.rs::setup_desktop` 里 `app.manage` |
-> | 事件 | `launcher://open` / `launcher://close`(`launcher.rs`);`clipboard://changed`(`clipboard.rs::CLIPBOARD_CHANGED`) | 全部无 payload,emit `()`;前端 `src/lib/events.ts` 镜像 |
+> | 事件 | `launcher://open` / `launcher://close`(`launcher.rs`,无 payload,emit `()`);`clipboard://changed`(`clipboard.rs::CLIPBOARD_CHANGED`,payload 为落库后的 `ClipboardItem`) | 前端 `src/lib/events.ts` 镜像 |
 > | 后台任务 | `spawn_blocking(run_monitor)` 消息循环,`RunEvent::Exit` 时 `stop_monitor(hwnd)` | `lib.rs` / `clipboard/windows.rs` |
 > | async 命令 | `commands/clipboard.rs` 6 个(`State<'_, ClipboardStore>` + sqlx) | 见 `command-guidelines.md` |
 >
@@ -41,15 +41,22 @@
 ```rust
 use tauri::Emitter; // emit 来自 Emitter trait
 
-// 现例(clipboard.rs):无 payload 事件
-/// 监听器录入新内容或上浮旧内容后广播;前端 `src/lib/events.ts` 的 `EVENTS.CLIPBOARD_CHANGED` 与此一一对应,无 payload
+// 现例(launcher.rs):无 payload 事件
+if let Err(e) = app.emit(LAUNCHER_OPENED, ()) {
+    log::warn!("发送 {LAUNCHER_OPENED} 事件失败: {e}");
+}
+
+// 现例(clipboard.rs):带 payload 的事件,payload 复用已有的列表 DTO,不为事件另造结构体
+/// 监听器录入新内容或上浮旧内容后广播,payload 为该条目(列表 DTO [`ClipboardItem`]);
+/// 重复复制同一内容时以同 id、新 `copied_at` 重发,前端按 id 去重置顶。
 pub const CLIPBOARD_CHANGED: &str = "clipboard://changed";
 
-if let Err(e) = app.emit(CLIPBOARD_CHANGED, ()) {
+let item = match store.record_captured(&captured).await { /* Err → warn + return */ };
+if let Err(e) = app.emit(CLIPBOARD_CHANGED, &item) {
     log::warn!("发送 {CLIPBOARD_CHANGED} 事件失败: {e}");
 }
 
-// 示意:将来带 payload 的事件
+// 示意:没有现成 DTO 可复用时,payload 是独立结构体
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsUpdated<'a> { pub key: &'a str }
@@ -57,9 +64,10 @@ pub struct SettingsUpdated<'a> { pub key: &'a str }
 
 - 事件名 `domain://action`,定义为 `pub const` 放在 **emit 点所在的领域模块**,注释指向前端镜像常量。不写字面量到 `emit` 里。现实样板:`launcher.rs` 的 `LAUNCHER_OPENED` / `LAUNCHER_CLOSED` 在 `show()` / `hide()` 内 emit;`clipboard.rs` 的 `CLIPBOARD_CHANGED` 在 `record()` 内 emit。
 - **谁 emit:只有前端无法自知的变化才发事件,且只在领域层发。** `clipboard://changed` 只由 `record()`(监听器录入)发出;`delete_item` / `set_favorite` 与对应命令**不 emit**。理由:这两种变化的发起者就是前端自己,单窗口应用里发命令的前端就是唯一消费者,命令返回 `Ok` 它就知道结果并直接改本地列表;再 emit 会造成「本地已改 + 收到事件重拉」双重刷新,还会丢掉已加载的分页与滚动位置。反过来,监听器录入(含粘贴写回后的回捕上浮)是前端不可能自知的,所以发。新增事件前先问:前端是不是本来就知道?
-- payload 是独立结构体:`#[derive(Debug, Clone, Serialize)]` + `rename_all = "camelCase"`;可借用字段避免 clone(如上例 `SettingsUpdated<'a>`)。有多种形态时用 `#[serde(tag = "type")]` 的枚举(struct 变体还要 `rename_all_fields = "camelCase"`,见 `../guides/ipc-contract.md`)。
-- **无 payload 的事件 emit `()`**(序列化为 `null`),前端 `EventPayloads` 对应类型写 `null`;不为此造空结构体——空结构体除了多一个名字要维护,对前端没有任何信息增量。将来真需要带数据时再改成结构体,两侧同一 PR 改。
-- payload 保持小:只发「什么变了」,前端需要完整数据时用现有命令再拉,避免 payload 长成第二份数据模型。`clipboard://changed` 甚至不带新条目:前端无法复现后端的 `LIKE` / kind / favorite 筛选来判断该不该插入,重拉首页是唯一不会错的做法。
+- payload 优先复用已有的 IPC DTO(`clipboard://changed` 直接 emit `&ClipboardItem`,与 `list_clipboard_items` 返回的元素同型,前端一份镜像类型两处用);没有可复用的才写独立结构体:`#[derive(Debug, Clone, Serialize)]` + `rename_all = "camelCase"`,可借用字段避免 clone(如上例 `SettingsUpdated<'a>`)。有多种形态时用 `#[serde(tag = "type")]` 的枚举(struct 变体还要 `rename_all_fields = "camelCase"`,见 `../guides/ipc-contract.md`)。
+- **无 payload 的事件 emit `()`**(序列化为 `null`),前端 `EventPayloads` 对应类型写 `null`;不为此造空结构体——空结构体除了多一个名字要维护,对前端没有任何信息增量。需要带数据时两侧同一 PR 改(`clipboard://changed` 从 `()` 改为条目就是这样做的)。
+- payload 保持小:发「变了的那一条」,不发列表、不发全文。`clipboard://changed` 带的是列表 DTO(文本只有 preview),前端能自己判断的筛选(kind / favorite)在前端判,判不了的(`LIKE` 搜索词)退化为重拉首页——payload 让常见路径(无搜索词)不丢分页与滚动位置,重拉兜住语义不确定的路径。
+- 产生 payload 的那次写入直接返回它(`upsert … RETURNING *` → `ItemRow` → `to_item`),不在 emit 前再 `SELECT` 一次;领域层的编排函数(`record_captured`)返回 DTO,emit 点只负责发。
 - `emit` 失败只 `log::warn!`,不 `unwrap`、不让命令因此失败。
 - 只发给某个窗口用 `emit_to("main", …)`;全局广播用 `emit`。
 - **流式 / 高频 / 需要顺序**的数据(下载进度、日志尾随)用 `tauri::ipc::Channel<T>` 作为命令参数,不用事件(官方文档:事件系统不为高吞吐设计)。

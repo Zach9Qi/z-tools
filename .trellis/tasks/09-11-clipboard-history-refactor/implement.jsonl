@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范索引、开发前检查清单与决策表(本任务要改其中「列表分页」「本地变更 vs 重拉」两条决策)"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "composable 命名 / 返回形态 / 生命周期清理;§2.1 是被重写对象 useClipboardHistory 的现行套路,重写后要回写"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "ClipboardPage.vue 的 SFC 形态、模板 ref、watch 写法"}
+{"file": ".trellis/spec/frontend/ipc-guidelines.md", "reason": "错误契约(Rust 中文文案直接展示)、事件订阅只走 useTauriEvent、事件类型镜像"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端门禁命令、测试放同目录、注释「为什么」、禁 console.log"}
+{"file": ".trellis/spec/backend/state-events-async.md", "reason": "事件 emit 约定(领域层 emit、payload 结构体、失败只 warn);本任务把 clipboard://changed 改为带 payload"}
+{"file": ".trellis/spec/backend/persistence.md", "reason": "store.rs 的 ItemRow → DTO 分层与 sqlx 运行时查询写法(upsert 改 RETURNING)"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端门禁与测试写法(内联 tests、内存库、expect 中文)"}
+{"file": ".trellis/spec/guides/ipc-contract.md", "reason": "事件契约两侧同 PR 改;§4 新增 / 修改事件清单"}
+{"file": ".trellis/tasks/09-11-clipboard-history-refactor/research/reference-comparison.md", "reason": "zach-tools useClipboardPage 与现状逐项对照,以及哪些采用 / 不采用"}

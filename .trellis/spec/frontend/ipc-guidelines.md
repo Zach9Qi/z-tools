@@ -69,7 +69,7 @@ export function getToggleShortcut(): Promise<string> {
 
 ## 5. 事件(Rust → 前端)
 
-已在用:`EVENTS.LAUNCHER_OPENED`(`launcher://open`,后端 show 后发,前端据此聚焦搜索框并全选旧词)、`EVENTS.LAUNCHER_CLOSED`(`launcher://close`,当前无消费者,保留给隐藏时复位状态的需求)、`EVENTS.CLIPBOARD_CHANGED`(`clipboard://changed`,监听器录入 / 上浮后发;`useClipboardHistory` 防抖 150ms 后 `refresh()`);全部无 payload,`EventPayloads` 对应类型为 `null`(Rust 侧 emit `()`)。约定:
+已在用:`EVENTS.LAUNCHER_OPENED`(`launcher://open`,后端 show 后发;`LauncherPanel` 据此聚焦搜索框并全选旧词,`useClipboardHistory` 据此做一次只比首条 id 的 sync 刷新)、`EVENTS.LAUNCHER_CLOSED`(`launcher://close`,当前无消费者,保留给隐藏时复位状态的需求)、`EVENTS.CLIPBOARD_CHANGED`(`clipboard://changed`,监听器录入 / 上浮后发,**payload 为落库后的 `ClipboardItem`**;`useClipboardHistory` 属于当前视图就按 id 去重置顶,有搜索词才防抖重拉)。前两者无 payload,`EventPayloads` 对应类型为 `null`(Rust 侧 emit `()`)。约定:
 
 - 事件名格式 `domain://action`,kebab-case,如 `launcher://open`。
 - 事件名常量与 payload 类型集中在 `src/lib/events.ts`,文件头注明对应的 Rust 常量位置:
@@ -86,13 +86,13 @@ export const EVENTS = {
 export interface EventPayloads {
   [EVENTS.LAUNCHER_OPENED]: null;
   [EVENTS.LAUNCHER_CLOSED]: null;
-  [EVENTS.CLIPBOARD_CHANGED]: null;
+  [EVENTS.CLIPBOARD_CHANGED]: ClipboardItem; // 复用 types/<domain>.ts 里的 DTO 镜像,不为事件另造一份类型
 }
 ```
 
 - 监听统一用 `src/composables/useTauriEvent.ts`(`useTauriEvent(name, handler)`):非 Tauri 不订阅;内部 `onUnmounted` 调用 unlisten;处理「组件已卸载但 `listen` 的 Promise 才 resolve」的竞态(resolve 后发现已卸载就立刻 unlisten);订阅失败 `.catch` 只记日志。(Tauri 官方文档要求组件卸载时必须 unlisten)
 - **`useTauriEvent.ts` 是整个 `src/` 唯一允许 import `@tauri-apps/api/event` 的文件**,与 `lib/api/**`(core)、`lib/window.ts`(window)并列为三个 Tauri API 入口。
-- 事件到达后怎么做由消费方决定,但原则固定:**事件只告知「变了」,数据用命令重拉**;自己发起的变更不依赖事件回流(后端也不会发),命令成功后直接改本地状态(现例 `useClipboardHistory` 的 `remove` / `toggleFavorite`,见 `composable-guidelines.md` §2.1)。
+- 事件到达后怎么做由消费方决定,但原则固定:**payload 里有的直接合入本地,前端判不了的筛选语义才重拉**(`useClipboardHistory.handleRecorded`:kind / favorite 自己判,`LIKE` 搜索词判不了就 `scheduleRefresh()`);自己发起的变更不依赖事件回流(后端也不会发),命令成功后直接改本地状态(现例 `remove` / `toggleFavorite`,见 `composable-guidelines.md` §2.1)。
 - 不在组件里手写 `listen` + 手动保存 `unlistenFn`。
 - 大量或有序的数据流(下载进度、日志流)用 `Channel`,不用事件;事件系统官方定位是「少量数据、多生产者多消费者」。
 - payload 类型写在 `events.ts`,消费方不 `event.payload as X` 强转(这类强转是技术债)。

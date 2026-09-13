@@ -57,11 +57,12 @@
 | edition | 2024,MSRV 1.85 | 本仓库已定 |
 | 窗口显示 / 隐藏 | 由 Rust 控制(快捷键 / 托盘 / 失焦 / `hide_launcher` 命令),前端不给 `allow-hide` | 隐藏要顺带 `set_ignore_cursor_events(true)` 并 emit 事件,前端直调 `hide()` 会绕过这两步留下透明挡点区 |
 | 无 payload 事件 | emit `()`,前端类型 `null` | 空结构体没有信息增量,只多一个名字要维护 |
+| 事件 payload | 复用已有 IPC DTO(`clipboard://changed` 直接 emit `&ClipboardItem`),产生它的写入 `RETURNING *` 顺手返回,不另查 | 前端一份镜像类型两处用;kind / favorite 前端能判就本地合入,不丢分页与滚动;判不了的搜索词退化重拉 |
 | 唤出快捷键 | 单一常量 `launcher::DEFAULT_TOGGLE_SHORTCUT`,经 `get_toggle_shortcut` 命令下发前端渲染键帽 | 预留可配置:到时只改命令实现读设置;字面量不在代码 / 文档各处散落 |
 | 托盘右键 | 只弹菜单,不动面板 | 用户右键可能只是想退出,面板不应因此消失;失焦回调已因光标在托盘上豁免 |
 | 平台钩子 cfg 写法 | `#[cfg(windows)]` 短写,不写 `target_os = "windows"` | 两者等价,短写更易读;非 Windows 不编译平台文件也不提供 stub |
 | 落盘目录 | 全部 `app_local_data_dir()`(`%LOCALAPPDATA%\<identifier>\`),禁用 `app_data_dir()`(Roaming) | WebView2 / 日志本来就在 LOCALAPPDATA;用户删一个目录即可完整清理;剪贴板数据不该漫游 |
 | 持久化 | sqlx 0.8 + SQLite,运行时 `sqlx::query`,`migrate!` 内嵌迁移 | 用户指定 sqlx;不用 `query!` 宏避免编译期依赖 DATABASE_URL;详见 `persistence.md` |
 | 剪贴板读写 / 监听 | 读写用 `arboard`(跨平台);监听与粘贴模拟按平台自写(`clipboard/windows.rs`) | arboard 三平台一致且不引入第二份 `windows` crate;监听是它不提供的能力,各平台几十行薄实现 |
-| 事件由谁 emit | `clipboard://changed` 只由领域层 `record()` 发,命令层不发 | 删除 / 收藏的发起者就是前端自己,命令返回 Ok 它就知道结果;再 emit 会造成本地已改 + 重拉双重刷新 |
+| 事件由谁 emit | `clipboard://changed` 只由领域层 `record()` 发,命令层不发;粘贴写回后被监听器回捕再 emit 同 id 条目是期望行为 | 删除 / 收藏的发起者就是前端自己,命令返回 Ok 它就知道结果;再 emit 会造成本地已改 + 事件双重处理。回捕 emit 让前端按 id 去重置顶即得到「上浮」,不需要后端抑制自写 |
 | 损坏库 | open 失败直接让 setup 失败,应用报错退出,不自动改名 / 重建 | 用户决定:静默丢历史比启动失败更糟,让用户看到错误自行处理 |

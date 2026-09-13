@@ -35,7 +35,7 @@
 ```text
 src/tools/<id>/                       # 现例 src/tools/clipboard/
 ├── index.ts            # 必须:导出该工具的 ToolModule(可以是多个);clipboard 导出一个 ViewToolModule `clipboardTool`
-├── XxxPage.vue         # view 型的工具页组件;`ClipboardPage.vue`:单根 <section>,只管布局 / 键位登记 / 哨兵观察,状态全在 composable
+├── XxxPage.vue         # view 型的工具页组件;`ClipboardPage.vue`:单根 <section>,只管布局 / 键位登记 / 滚动容器(翻页阈值、重置回顶),状态全在 composable
 ├── components/         # 可选:工具私有组件;`ClipboardTabs.vue` / `ClipboardItemRow.vue` / `ClipboardItemDetail.vue`
 ├── composables/        # 可选:工具私有 composable;`useClipboardHistory.ts`(页面状态拥有者,见 composable-guidelines.md §2.1)
 └── lib/                # 可选:工具私有纯函数 + 同目录 *.test.ts;`format.ts`(formatRelativeTime / formatBytes / summarizeFiles / isExpandable)+ `format.test.ts`
@@ -77,7 +77,7 @@ export const modules: ToolModule[] = [clipboardTool, myTool];
 - 已被面板占用、工具页不要再登记的键:`Escape`(返回主页)、空输入时的 `Backspace`(返回主页)、`Tab`(被无条件拦截)。
 - 焦点常驻搜索栏:工具页里的可点击元素加 `@mousedown.prevent`,除非它本身就是需要输入的控件(`ClipboardItemRow.vue` 的行主体 / 星标 / chevron 三个按钮都如此)。行内子按钮用 `@click.stop` 防止冒泡到行的主动作;`<button>` 不能嵌套,行主体与子按钮是兄弟而不是父子。
 - 工具页需要调后端时走 `@/lib/api`(或 `@/lib/api/<domain>`),遵守 `ipc-guidelines.md`;不在工具页里 `invoke`。页面状态与命令编排收进工具私有 composable(`useClipboardHistory`),页面组件只做绑定。
-- 列表类工具页的分页用底部哨兵 + `IntersectionObserver`(`root` 为列表滚动容器),哨兵常渲染、观察器只挂一次、`onUnmounted` `disconnect`;IO 只在进出时回调,一页加载完后要 `watch(loading)` + `nextTick` 补查一次哨兵是否仍在视口内(`ClipboardPage.vue` 的 `sentinelInView`)。
+- 列表类工具页的分页用滚动容器 `@scroll`:`scrollTop + clientHeight >= scrollHeight - 200` 时调 composable 的 `loadMore()`,在途 / 到底由 composable 守卫(`ClipboardPage.vue` 的 `handleScroll`)。不用 `IntersectionObserver` 哨兵:它只在进出视口时回调,一页加载完哨兵仍在视口内就要 `watch + nextTick` 补查,请求失败后补查会变成死循环。整表重置后回顶靠 `watch(resetTick)` + `nextTick` + `scrollTo({ top: 0 })`。
 
 ## 6. 新增一个工具的步骤
 

@@ -7,8 +7,8 @@
 > | `useKeymap.ts` | `useKeymap(bindings)`:把一份快捷键绑定登记进 `stores/keymap`,挂载登记 / 卸载注销 / 变化重新登记;`useKeymapListener()`:挂**唯一**的 `window keydown` 监听并转给 `store.dispatch`,只由 `LauncherPanel` 调一次 |
 > | `useRowNavigation.ts` | 磁贴网格的 `selectedIndex` + 方向键 / Enter 登记;下标计算全部交给 `lib/launcher/navigation.ts` 纯函数 |
 > | `useAutoHeight.ts` | `ResizeObserver` 观察面板根,高度变化时调 `lib/window.resizeLauncherToContent`;卸载 `disconnect` |
-> | `useTauriEvent.ts` | `useTauriEvent(EVENTS.X, handler)`:订阅一个 Rust 事件,payload 类型由 `lib/events.ts` 推导;非 Tauri 不订阅;卸载 unlisten 并处理 `listen` 晚于卸载 resolve 的竞态。**唯一**允许 import `@tauri-apps/api/event` 的文件;`LauncherPanel` 用它在 `launcher://open` 时聚焦搜索框,`useClipboardHistory` 用它订阅 `clipboard://changed` |
-> | `tools/clipboard/composables/useClipboardHistory.ts` | 剪贴板工具页的**状态拥有者**:列表 / 筛选 / 选中 / 展开 / 分页 + 6 个后端命令的编排;工具私有 composable 的样板(§2.1) |
+> | `useTauriEvent.ts` | `useTauriEvent(EVENTS.X, handler)`:订阅一个 Rust 事件,payload 类型由 `lib/events.ts` 推导;非 Tauri 不订阅;卸载 unlisten 并处理 `listen` 晚于卸载 resolve 的竞态。**唯一**允许 import `@tauri-apps/api/event` 的文件;`LauncherPanel` 用它在 `launcher://open` 时聚焦搜索框,`useClipboardHistory` 用它订阅 `clipboard://changed`(带条目 payload)与 `launcher://open`(唤起 sync) |
+> | `tools/clipboard/composables/useClipboardHistory.ts` | 剪贴板工具页的**状态拥有者**:列表 / 筛选 / 选中 / 展开 / 分页 + 后端命令与事件的编排;工具私有 composable 的样板(§2.1) |
 
 ---
 
@@ -66,17 +66,20 @@ export function useTauriEvent<K extends keyof EventPayloads>(
 | 套路 | 写法 | 为什么 |
 |---|---|---|
 | 入参用 `MaybeRefOrGetter` + `toValue()` | 页面传 `() => props.query` | 调用方既能传静态值也能传 getter,composable 内 `watch(() => toValue(query))` |
-| 每个 `ref` 一行 `/** */` 写「代表什么 / 何时变 / 与谁互斥」 | `items` / `kind` / `favoriteOnly` / `selectedIndex` / `expandedId` / `loading` / `hasMore` / `error` | `expandedId` 与 `selectedIndex` 独立这类约定只能写在声明处 |
-| **自己发起的变更不重拉** | `remove` / `toggleFavorite` 在命令 `await` 成功后直接 `splice` / 翻转字段,**不碰 `hasMore`** | 结果确定,重拉只会丢掉已加载的后续页和滚动位置;后端也不为这些变更发事件 |
-| **筛选变化与外部事件才 `refresh()`** | `setKind` / `toggleFavoriteOnly` 立即;`query` 防抖 200ms;`clipboard://changed` 防抖 150ms | 筛选变了本地数据不再成立;搜索每个字符都重拉太浪费;粘贴写回 + 回捕会连发事件 |
-| **递增序号丢过期响应** | `let requestSeq = 0`;每次 `load` 取 `const seq = ++requestSeq`,响应到达时 `seq !== requestSeq` 则整体忽略(含 `loading` / `error`);`onUnmounted` 再 `requestSeq++` | 快速切 Tab / 连续输入会有多个在途请求,只有最后一个的结果是当前筛选的;卸载后的响应不应再写状态 |
-| `hasMore` 判据唯一 | 只在响应到达时写 `page.length >= PAGE_SIZE` | 从 `items.length` 推会在本地删一条后误判到底 |
-| 游标不存状态 | `loadMore()` 从 `items.at(-1)` 现取 `{ copiedAt, id }`;`items` 空则退化为 `refresh()` | 本地删掉末条后自动退到新末条,无需另维护一份游标 |
-| 选中下标修正集中在一处 | `removeLocal(id)`:删的在选中项之前则 `selectedIndex--`,再 `clampSelection()`;删的是展开项则 `expandedId = null` | 删除与「只看收藏时取消收藏」共用同一份下标逻辑 |
+| 每个 `ref` 一行 `/** */` 写「代表什么 / 何时变 / 与谁互斥」 | `items` / `kind` / `favoriteOnly` / `selectedId` / `expandedId` / `loading` / `exhausted` / `error` / `resetTick` | `expandedId` 与 `selectedId` 独立这类约定只能写在声明处 |
+| **列表请求只有一个入口** | `requestList({ invalidate?, before?, apply })`:`loading` / `try-catch` / 过期判断 / `error` 写入 / `finally` 全在这里;调用方只声明「要不要作废在途请求、拉哪页、结果如何合入」 | 首屏 / 重拉 / 翻页三条路径共享同一份错误与过期处理,不会各写一遍漏一处 |
+| **`generation` 只在整表重拉递增** | `const gen = invalidate ? ++generation : generation`;响应到达时 `gen !== generation` 整体忽略(含 `loading` / `error` / `finally`);翻页不递增,靠 `loading` 守卫串行;`onUnmounted` 再 `generation++` | 快速切 Tab / 连续输入只有最后一次的结果是当前筛选的;翻页与翻页之间不互相作废;卸载后的响应不应再写状态 |
+| **选中以 id 持有** | `selectedId: Ref<number \| null>`,`selectedIndex` / `selected` 用 `computed` 派生;`dropItem(id)` 删的是选中项时取 `items[min(index, length - 1)]` 就近改选,删的是展开项则 `expandedId = null` | 置顶 / 删除 / 重排后选中跟着条目走,不需要 `selectedIndex--` / clamp 这类下标修正 |
+| **自己发起的变更不重拉** | `remove` / `toggleFavorite` 在命令 `await` 成功后直接 `dropItem` / 翻转字段,**不碰 `exhausted`** | 结果确定,重拉只会丢掉已加载的后续页和滚动位置;后端也不为这些变更发事件 |
+| **后端事件本地合并** | `clipboard://changed` 带条目:不满足 `kind` / `favoriteOnly` 忽略;有搜索词只当失效信号 `scheduleRefresh()`;否则 `placeOnTop(item)`(按 id 去重后 `unshift`) | kind / favorite 前端能判,`LIKE` 不能判就退化为重拉;粘贴写回被监听器回捕后以同 id 回来,置顶即得到「上浮」效果 |
+| **筛选变化整表重拉,唤起只 sync** | `setKind` / `toggleFavoriteOnly` 立即 `refresh()`;`query` 防抖;`launcher://open` → `refreshList("sync")` 只比首条 id,相同不重置 | 筛选变了本地数据不再成立;隐藏期间列表由事件维护,唤起只兜底 emit 失败 / 竞态,不丢滚动与选中 |
+| `applyReset` 集中重置 | 替换 `items`、写 `exhausted`、选中首项、收起展开、`resetTick++` | 「回顶 / 选首项」不散落在 `setKind` / `toggleFavoriteOnly` / `query` 三处;页面 `watch(resetTick)` 滚回顶部 |
+| `exhausted` 判据唯一 | 只在响应到达时写 `page.length < PAGE_SIZE` | 从 `items.length` 推会在本地删一条后误判到底 |
+| 游标不存状态 | `loadMore()` 从 `items.at(-1)` 现取 `{ copiedAt, id }`;`loading \|\| exhausted \|\| !last` 直接返回;响应按 id 去重后 `push` | 本地删掉末条后自动退到新末条;在途期间被事件置顶的条目不会被追加成重复行 |
 | 错误态 | 每个命令 `try / catch` → `console.error("中文前缀:", e)` + `error.value = String(e)`,下次成功清空 | 与 `ipc-guidelines.md` §3 一致;Rust 文案已是完整句子 |
-| 定时器清理 | 两个防抖 `setTimeout` 句柄在 `onUnmounted` `clearTimeout` | 组件销毁后不再去 `refresh` |
+| 定时器清理 | 一个防抖 `setTimeout` 句柄(搜索词与带搜索词的事件共用)在 `onUnmounted` `clearTimeout` | 组件销毁后不再去 `refresh`;两个来源本来就该合并成一次重拉 |
 
-纯库代码的部分(相对时间、字节数、文件摘要、可展开判定)不在 composable 里,在 `tools/clipboard/lib/format.ts` 并有 `format.test.ts`(§5)。页面级的 DOM 观察(`IntersectionObserver` 哨兵)留在 `ClipboardPage.vue`:它需要模板 `ref`,composable 不操作 DOM(§4)。
+纯库代码的部分(相对时间、字节数、文件摘要、可展开判定)不在 composable 里,在 `tools/clipboard/lib/format.ts` 并有 `format.test.ts`(§5)。页面级的滚动容器操作(`@scroll` 距底阈值触发 `loadMore()`、`watch(resetTick)` 滚回顶部)留在 `ClipboardPage.vue`:它需要模板 `ref`,composable 不操作 DOM(§4)。
 
 ## 3. 生命周期
 
@@ -88,12 +91,13 @@ export function useTauriEvent<K extends keyof EventPayloads>(
 
 - composable 可以调用 `src/lib/api/**` 和 store;不反向被 `lib/` 依赖。
 - 一个 composable 只做一件事:「监听事件」和「拉取列表」分开写,不做大而全的 `useApp()`。
-- 与 UI 库无关:不 import 组件、不操作 DOM(需要 DOM 的用 `ref<HTMLElement>` 由调用方传入,如 `useAutoHeight(rootRef)`;或像 `ClipboardPage.vue` 的 `IntersectionObserver` 那样留在页面组件里,composable 只暴露 `loadMore()`)。
+- 与 UI 库无关:不 import 组件、不操作 DOM(需要 DOM 的用 `ref<HTMLElement>` 由调用方传入,如 `useAutoHeight(rootRef)`;或像 `ClipboardPage.vue` 的 `@scroll` 阈值判定 / `scrollTo` 那样留在页面组件里,composable 只暴露 `loadMore()` 与 `resetTick`)。
 - **唯一的全局键盘监听放在 `useKeymapListener`**,其他 composable(`useKeymap` / `useRowNavigation` / 工具页自己的)只登记绑定、不挂 `addEventListener`。登记与监听拆开,是为了避免每个登记方各挂一个监听导致同一次 keydown 被多处处理、`isComposing` / Tab 拦截等公共规则散落多处。
 
 ## 5. 测试
 
-- composable 的纯逻辑部分抽成 `lib/` 里的纯函数并写 `*.test.ts`(工具私有的放 `tools/<id>/lib/`,现例 `format.ts` / `format.test.ts`);涉及生命周期的部分靠组件层手工验证,不强求单测(当前 `vitest.config.ts` 无 DOM 环境)。浏览器预览(`bun run dev`)的假数据要支持同样的交互,才能手工验证这些套路。
+- composable 的纯逻辑部分抽成 `lib/` 里的纯函数并写 `*.test.ts`(工具私有的放 `tools/<id>/lib/`,现例 `format.ts` / `format.test.ts`)。浏览器预览(`bun run dev`)的假数据要支持同样的交互,才能手工验证这些套路。
+- 编排型 composable(请求 / 事件 / 生命周期交织)可以不依赖 DOM 环境直接测:`useClipboardHistory.test.ts` 用 `createRenderer` 造一个只渲染注释节点的最小渲染器挂载真实组件,`vi.mock` 掉 `lib/api/<domain>` 与 `useTauriEvent`,把 list 请求收进一个可控队列(`settle(index, page | Error)` 决定谁先回来),事件订阅按名收集回调后手动 `emit`。这样能锁住过期丢弃、防抖合并、事件置顶这类只靠手工很难复现的时序。
 
 ## 6. 禁止
 

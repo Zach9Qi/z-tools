@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// 剪贴板工具页:Tabs + 可滚动列表 + 底部哨兵(触发追加分页)+ 空态 / 加载 / 错误条。
-// 状态全部在 useClipboardHistory;这里只负责布局、键位登记与哨兵观察。
-import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+// 剪贴板工具页:Tabs + 可滚动列表(滚到接近底部时追加分页)+ 空态 / 加载 / 错误条。
+// 状态全部在 useClipboardHistory;这里只负责布局、键位登记与滚动容器的两件事(触发翻页、重置后回顶)。
+import { nextTick, ref, watch } from "vue";
 import { useKeymap } from "@/composables/useKeymap";
 import IconClipboard from "~icons/lucide/clipboard";
 import ClipboardItemRow from "./components/ClipboardItemRow.vue";
@@ -21,8 +21,8 @@ const {
   selected,
   expandedId,
   loading,
-  canLoadMore,
   error,
+  resetTick,
   loadMore,
   paste,
   remove,
@@ -34,42 +34,21 @@ const {
   moveSelection,
 } = useClipboardHistory(() => props.query);
 
-/** 列表滚动容器;IntersectionObserver 的 root */
+/** 列表滚动容器;翻页阈值与回顶都作用在它上 */
 const listRef = ref<HTMLElement | null>(null);
-/** 列表末尾的哨兵;进入视口即请求下一页 */
-const sentinelRef = ref<HTMLElement | null>(null);
-/** 哨兵观察器;卸载时 disconnect */
-let observer: IntersectionObserver | undefined;
+/** 距底不足此像素数即请求下一页;一页 100 条远高于一屏,滚动一定会经过这个区间 */
+const LOAD_MORE_THRESHOLD_PX = 200;
 
-/** 哨兵当前是否在列表视口内;用几何而非 IO 回调缓存,避免拿到过期状态 */
-function sentinelInView(): boolean {
-  const list = listRef.value;
-  const sentinel = sentinelRef.value;
-  if (list === null || sentinel === null) return false;
-  return sentinel.getBoundingClientRect().top <= list.getBoundingClientRect().bottom;
+// 只在用户滚动时触发:请求失败不会自转重试,再滚一次即重试;在途 / 到底由 loadMore 自己守卫
+function handleScroll(): void {
+  const el = listRef.value;
+  if (el === null) return;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - LOAD_MORE_THRESHOLD_PX) void loadMore();
 }
 
-onMounted(() => {
-  const list = listRef.value;
-  const sentinel = sentinelRef.value;
-  if (list === null || sentinel === null) return;
-  observer = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
-    },
-    { root: list },
-  );
-  observer.observe(sentinel);
-});
-onUnmounted(() => observer?.disconnect());
-
-// IO 只在「进入 / 离开」时回调:成功且还有下一页时等 DOM 更新补查哨兵。
-// nextTick 内复查分页条件,避免排队期间已有新请求在途、失败或到底。
-watch(canLoadMore, (canLoad) => {
-  if (!canLoad) return;
-  void nextTick(() => {
-    if (canLoadMore.value && sentinelInView()) void loadMore();
-  });
+// 整表重置(筛选 / 搜索 / 唤起时发现漏了事件)后回到顶部;翻页、置顶、普通唤起不触发,滚动位置留着
+watch(resetTick, () => {
+  void nextTick(() => listRef.value?.scrollTo({ top: 0 }));
 });
 
 useKeymap([
@@ -122,7 +101,7 @@ useKeymap([
     <!-- 错误条:命令失败的中文文案(Rust 产出,完整句子,不拼前缀);详情区内的拉取错误不走这里 -->
     <p v-if="error" class="shrink-0 border-t px-4 py-1 text-xs text-destructive">{{ error }}</p>
     <!-- min-h-0 flex-1 让列表在面板固定高度内自己滚动 -->
-    <div ref="listRef" class="min-h-0 flex-1 overflow-y-auto border-t p-2">
+    <div ref="listRef" class="min-h-0 flex-1 overflow-y-auto border-t p-2" @scroll="handleScroll">
       <!-- 空态与列表互斥;首屏加载中不显示空态,避免闪一下「暂无记录」 -->
       <div v-if="items.length === 0 && !loading" class="flex flex-col items-center gap-4 py-12">
         <div class="flex size-12 items-center justify-center rounded-2xl border bg-muted">
@@ -144,8 +123,6 @@ useKeymap([
           @toggle-expanded="toggleExpanded(item.id)"
         />
       </ul>
-      <!-- 哨兵始终渲染(不随 hasMore v-if),观察器只挂一次 -->
-      <div ref="sentinelRef" class="h-px" aria-hidden="true" />
     </div>
   </section>
 </template>

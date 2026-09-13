@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端门禁命令与代码卫生;检查时逐条对照"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "检查 composable 返回对象 / 无 DOM 操作 / 副作用清理"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "检查 ClipboardPage.vue 模板与 watch 写法"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端门禁(fmt / clippy -D warnings / test)与测试规范"}
+{"file": ".trellis/spec/backend/state-events-async.md", "reason": "检查事件 emit 点、payload 序列化属性、失败只 warn"}
+{"file": ".trellis/spec/guides/ipc-contract.md", "reason": "检查事件名两侧一致、payload 类型镜像、快速自检命令"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层改动(Rust 事件 payload → 前端合并)的一致性检查"}
+{"file": ".trellis/tasks/09-11-clipboard-history-refactor/research/reference-comparison.md", "reason": "检查实现是否与「采用 / 不采用」清单一致"}

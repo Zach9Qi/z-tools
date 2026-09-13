@@ -4,7 +4,7 @@
 //! 边界：
 //! - 历史存储（`ClipboardStore`：SQLite 行 + `images/` 下的图片文件）整体在 `clipboard/store.rs`，这里只 `pub use`；
 //!   剪贴板读写（arboard，跨平台）在 `clipboard/backend.rs`；监听消息窗口与 `SendInput` 在 `clipboard/windows.rs`（仅 Windows 编译）。
-//! - 本模块不处理 IPC 参数校验（命令层的事）；`clipboard://changed` 事件**只**由这里的 `record()` 发出，
+//! - 本模块不处理 IPC 参数校验（命令层的事）；`clipboard://changed` 事件**只**由这里的 `record()` 发出（携带落库后的条目），
 //!   命令层的删除 / 收藏由前端自己更新本地列表，不再广播。
 //!
 //! 可见性：本模块与 `backend` / `store` 子模块都是 `pub`（同 `pub mod error` 先例）——跨平台的读写 / 存储层是 crate 的公开契约，
@@ -36,7 +36,9 @@ pub const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024;
 pub const THUMB_MAX_EDGE: u32 = 256;
 /// 列表文本预览按 char 截断长度；超出即 `truncated = true`，全文经 `get_clipboard_text` 按需拉
 pub const PREVIEW_CHARS: usize = 300;
-/// 监听器录入新内容或上浮旧内容后广播；前端 `src/lib/events.ts` 的 `EVENTS.CLIPBOARD_CHANGED` 与此一一对应，无 payload
+/// 监听器录入新内容或上浮旧内容后广播，payload 为该条目（列表 DTO [`ClipboardItem`]）；
+/// 重复复制同一内容时以同 id、新 `copied_at` 重发，前端按 id 去重置顶。
+/// 前端 `src/lib/events.ts` 的 `EVENTS.CLIPBOARD_CHANGED` 与此一一对应。
 pub const CLIPBOARD_CHANGED: &str = "clipboard://changed";
 
 /// 条目类型；与 TS `ClipboardKind = "text" | "image" | "files"` 镜像，也是 `kind` 列的取值。
@@ -221,15 +223,18 @@ pub fn file_name_of(path: &str) -> String {
         .unwrap_or_else(|| path.to_owned())
 }
 
-/// 监听器录入：图片先落盘 → upsert（重复内容上浮）→ 淘汰超额条目并删其图片 → 广播 `clipboard://changed`。
+/// 监听器录入：图片先落盘 → upsert（重复内容上浮）→ 淘汰超额条目并删其图片 → 带着落库后的条目广播 `clipboard://changed`。
 ///
 /// 失败只记日志：监听器没有调用方可以处理错误，漏记一条不影响后续采集。
 pub async fn record<R: Runtime>(app: &AppHandle<R>, store: &ClipboardStore, captured: Captured) {
-    if let Err(e) = store.record_captured(&captured).await {
-        log::warn!("记录剪贴板内容失败: {e}");
-        return;
-    }
-    if let Err(e) = app.emit(CLIPBOARD_CHANGED, ()) {
+    let item = match store.record_captured(&captured).await {
+        Ok(item) => item,
+        Err(e) => {
+            log::warn!("记录剪贴板内容失败: {e}");
+            return;
+        }
+    };
+    if let Err(e) = app.emit(CLIPBOARD_CHANGED, &item) {
         log::warn!("发送 {CLIPBOARD_CHANGED} 事件失败: {e}");
     }
 }

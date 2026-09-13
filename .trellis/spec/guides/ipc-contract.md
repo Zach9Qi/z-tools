@@ -16,7 +16,8 @@
 | 带数据的枚举 | `#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]` | 判别联合 `{ kind: "…" }`,TS 侧拆成 `XxxTextItem \| XxxImageItem \| …` 并抽公共 `Base` | `ClipboardItem::Text { id, copied_at, preview, … }` ↔ `{ kind: "text"; id; copiedAt; preview; … }`(`src/types/clipboard.ts`) |
 | `Option<T>` | `None` | `null`(不是 `undefined`) | — |
 | 事件名 | `pub const X: &str = "domain://action"` | `EVENTS.X = "domain://action"` | `launcher://open`(`launcher.rs::LAUNCHER_OPENED`)、`clipboard://changed`(`clipboard.rs::CLIPBOARD_CHANGED` ↔ `EVENTS.CLIPBOARD_CHANGED`) |
-| 无 payload 事件 | `app.emit(X, ())` | `EventPayloads[X]: null` | `launcher://open` / `launcher://close` / `clipboard://changed` |
+| 无 payload 事件 | `app.emit(X, ())` | `EventPayloads[X]: null` | `launcher://open` / `launcher://close` |
+| 带 payload 事件 | `app.emit(X, &dto)`,payload 复用命令已有的 DTO | `EventPayloads[X]: Dto`(复用 `types/<domain>.ts` 镜像) | `clipboard://changed` ↔ `ClipboardItem`(与 `list_clipboard_items` 元素同型) |
 | 错误 | `AppError` → 中文字符串 | `catch (error)` → `String(error)` | `"参数错误: 记录不存在"`、`"当前平台暂不支持: 剪贴板粘贴"` |
 | 本地文件路径 | 返回绝对路径字符串(`image_path` / `thumb_path`) | `convertFileSrc(path)` → `asset://` URL,**只在 `src/lib/api/**`** | `toAssetUrl()`(`src/lib/api/clipboard.ts`);需 `tauri.conf.json5` `assetProtocol.scope` 覆盖该目录 |
 
@@ -30,7 +31,7 @@
 - **Rust 是数据真相**:持久化、系统交互、业务规则都在 Rust;前端 store 只镜像与缓存。
 - **文案由 Rust 产出**:错误文案是完整中文句子,前端不拼前缀。
 - **降级由前端负责**:每个 `src/lib/api/**` 封装函数处理非 Tauri 环境,Rust 不知道浏览器预览的存在。预览假数据要像真实 IPC 一样返回**全新对象**(`structuredClone`),不要把可变内存表的对象直接交出去(见 `../frontend/ipc-guidelines.md` §4)。
-- **谁发事件**:前端自己发起的变更(删除 / 收藏)命令返回 `Ok` 就是结果,前端直接改本地,Rust 不 emit;只有前端无法自知的变化(监听器录入)才发事件,且不带数据,前端重拉(`clipboard://changed`)。
+- **谁发事件**:前端自己发起的变更(删除 / 收藏)命令返回 `Ok` 就是结果,前端直接改本地,Rust 不 emit;只有前端无法自知的变化(监听器录入)才发事件,payload 就是变了的那一条(`clipboard://changed` 带 `ClipboardItem`),前端能判的筛选自己合入、判不了的(搜索词 `LIKE`)重拉。
 - **类型镜像手写**:`src/types/<domain>.ts` 头部注明对应 Rust 路径;Rust 改字段,同一个 PR 改 TS。
 
 ## 3. 新增 / 改名一个命令
@@ -52,9 +53,9 @@
 | # | 位置 | 动作 |
 |---|---|---|
 | 1 | Rust 领域模块 | `pub const XXX: &str = "domain://action";`,注释指向前端常量 |
-| 2 | 同处 | payload 结构体 `#[derive(Debug, Clone, Serialize)] #[serde(rename_all = "camelCase")]`;**无 payload 则 emit `()`**,不造空结构体 |
+| 2 | 同处 | payload 优先复用已有 DTO(如 `ClipboardItem`);否则独立结构体 `#[derive(Debug, Clone, Serialize)] #[serde(rename_all = "camelCase")]`;**无 payload 则 emit `()`**,不造空结构体 |
 | 3 | emit 点 | `use tauri::Emitter;` 后 `if let Err(e) = app.emit(XXX, payload) { log::warn!(...) }` |
-| 4 | `src/lib/events.ts` | `EVENTS.XXX` 常量 + `EventPayloads[...]` 类型(无 payload 写 `null`) |
+| 4 | `src/lib/events.ts` | `EVENTS.XXX` 常量 + `EventPayloads[...]` 类型(无 payload 写 `null`;有 payload 则 `import type` 复用 `types/<domain>.ts` 的镜像) |
 | 5 | 消费方组件 / composable | `useTauriEvent(EVENTS.XXX, handler)`(`src/composables/useTauriEvent.ts`),不手写 `listen` |
 | 6 | 评估 | payload 是否够小?是否应改用 `Channel`(流式 / 高频)? |
 

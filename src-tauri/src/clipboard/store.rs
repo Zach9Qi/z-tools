@@ -90,7 +90,11 @@ impl ClipboardStore {
 
     /// 完整录入：图片落盘 → 去重上浮 → 淘汰 → 清理图片；任一步失败原样返回。
     /// 文本 / 文件录入同样可能淘汰图片，因此也必须持有生命周期锁。
-    pub(super) async fn record_captured(&self, captured: &Captured) -> Result<(), AppError> {
+    /// 返回录入 / 上浮后的条目（列表 DTO），供 `record()` 作为 `clipboard://changed` 的 payload。
+    pub(super) async fn record_captured(
+        &self,
+        captured: &Captured,
+    ) -> Result<ClipboardItem, AppError> {
         let guard = self.lifecycle.clone().lock_owned().await;
         #[cfg(test)]
         self.lifecycle_probe.checkpoint(tests::Stage::Started).await;
@@ -107,14 +111,15 @@ impl ClipboardStore {
         };
         #[cfg(test)]
         self.lifecycle_probe.checkpoint(tests::Stage::Saved).await;
-        self.upsert(captured, now_ms()).await?;
+        // 刚写入的行 copied_at 最新，不会被随后的 trim 淘汰；先转 DTO 省去持锁期间再查一次
+        let item = self.to_item(self.upsert(captured, now_ms()).await?)?;
         let evicted = self.trim().await?;
         #[cfg(test)]
         self.lifecycle_probe
             .checkpoint(tests::Stage::BeforeCleanup)
             .await;
         self.remove_image_files(&evicted);
-        Ok(())
+        Ok(item)
     }
 
     /// 完整删除：行删除后仍持锁清理图片，避免清理掉并发重新录入的同哈希图片。
@@ -133,7 +138,8 @@ impl ClipboardStore {
     }
 
     /// 写入一条快照：同 `hash` 已存在则只把 `copied_at` 上浮为 `now`（不新增、不改收藏），否则插入新行。
-    async fn upsert(&self, captured: &Captured, now: i64) -> Result<(), AppError> {
+    /// `RETURNING *` 在插入与更新两个分支都返回落库后的整行。
+    async fn upsert(&self, captured: &Captured, now: i64) -> Result<ItemRow, AppError> {
         let text = searchable_text(captured);
         let (image_file, width, height, files, size) = match captured {
             Captured::Text(t) => (None, None, None, None, t.len() as i64),
@@ -152,11 +158,12 @@ impl ClipboardStore {
             ),
             Captured::Files(paths) => (None, None, None, Some(Json(paths)), 0),
         };
-        sqlx::query(
+        let row = sqlx::query_as::<_, ItemRow>(
             "INSERT INTO clipboard_items \
              (kind, hash, text, image_file, image_width, image_height, files, size, favorite, created_at, copied_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) \
-             ON CONFLICT(hash) DO UPDATE SET copied_at = excluded.copied_at",
+             ON CONFLICT(hash) DO UPDATE SET copied_at = excluded.copied_at \
+             RETURNING *",
         )
         .bind(captured.kind())
         .bind(captured.hash())
@@ -168,9 +175,9 @@ impl ClipboardStore {
         .bind(size)
         .bind(now)
         .bind(now)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
-        Ok(())
+        Ok(row)
     }
 
     /// 淘汰超出 `MAX_ITEMS` 的非收藏条目（按 `copied_at`、`id` 保留最新），返回被删图片条目的原图文件名。
@@ -558,7 +565,8 @@ mod tests {
         }
     }
 
-    async fn pause_at<F: Future<Output = Result<(), AppError>>>(
+    // 两个编排入口返回类型不同（录入返回条目、删除返回 ()），辅助函数只要求结果可打印
+    async fn pause_at<T: std::fmt::Debug, F: Future<Output = Result<T, AppError>>>(
         mut operation: Pin<&mut F>,
         entered: oneshot::Receiver<()>,
     ) {
@@ -568,7 +576,7 @@ mod tests {
         }
     }
 
-    async fn assert_waiting<F: Future<Output = Result<(), AppError>>>(
+    async fn assert_waiting<T, F: Future<Output = Result<T, AppError>>>(
         store: &ClipboardStore,
         mut operation: Pin<&mut F>,
     ) {
@@ -895,9 +903,12 @@ mod tests {
     #[tokio::test]
     async fn upsert_same_content_bumps_copied_at_without_new_row() {
         let store = memory_store().await;
-        store.upsert(&text("hello"), 1).await.expect("upsert");
+        let first = store.upsert(&text("hello"), 1).await.expect("upsert");
         store.upsert(&text("other"), 2).await.expect("upsert");
-        store.upsert(&text("hello"), 3).await.expect("upsert");
+        let bumped = store.upsert(&text("hello"), 3).await.expect("upsert");
+        // RETURNING 在更新分支也要返回该行：同 id、新 copied_at
+        assert_eq!(bumped.id, first.id);
+        assert_eq!((first.copied_at, bumped.copied_at), (1, 3));
         let items = all(&store).await;
         assert_eq!(items.len(), 2);
         assert_eq!(copied_at_of(&items[0]), 3);
@@ -910,6 +921,24 @@ mod tests {
                 .await
                 .expect("查询");
         assert_eq!(created, 1);
+    }
+
+    #[tokio::test]
+    async fn record_captured_returns_item_matching_list_head() {
+        let store = memory_store().await;
+        store.upsert(&text("older"), 1).await.expect("upsert");
+        let recorded = store
+            .record_captured(&files(&["/a/b.txt"]))
+            .await
+            .expect("应录入文件条目");
+        let items = all(&store).await;
+        assert_eq!(items.len(), 2);
+        // 事件 payload 与前端随后 list 拿到的首条应完全一致（含 files 的 name / exists 整形）
+        assert_eq!(
+            serde_json::to_string(&recorded).expect("序列化"),
+            serde_json::to_string(&items[0]).expect("序列化")
+        );
+        assert!(matches!(recorded, ClipboardItem::Files { .. }));
     }
 
     #[tokio::test]
