@@ -65,8 +65,9 @@
 | IPC 封装拆分 | `lib/api/{index,launcher,clipboard}.ts`,`index.ts` 只 `export *`;调用方仍 `from "@/lib/api"` | 一个 Rust `commands/<domain>.rs` 对一个前端文件,假数据表随领域走;汇出口让拆文件对调用方透明 |
 | 浏览器假数据 | 可变内存表 + 返回前 `structuredClone` | 真实 IPC 经 JSON 总是新对象;直接交出表内对象会被 reactive 代理包住,后续「先改裸对象再对代理赋同值」被 Vue 判未变不重渲染(实测) |
 | 列表本地变更 vs 重拉 | 自己发起的删除 / 收藏改本地;后端事件带条目,属于当前 kind / 收藏视图就本地置顶(按 id 去重),有搜索词才退化为防抖重拉;筛选变化整表重拉;唤起只比首条 id 决定要不要重置 | 重拉会丢已加载分页与滚动位置;kind / favorite 前端能判、`LIKE` 不能判;后端也不为前端自发变更发事件(`useClipboardHistory`,对齐 zach-tools `useClipboardPage`) |
-| 列表请求编排 | 单入口 `requestList({ invalidate, before, apply })` + `generation` 版本号(只在整表重拉递增,翻页靠 `loading` 串行);选中以 `selectedId` 持有、下标派生 | loading / 错误 / 过期判断只写一处;翻页不互相作废;id 持有的选中在置顶 / 删除后不需要修正下标 |
-| 列表分页 | keyset 游标 `{ copiedAt, id }` 从末条现取;`exhausted` 只由响应长度写;列表 `@scroll` 距底 200px 触发 `loadMore()` | OFFSET 在列表实时插入新行时会重复;从 `items.length` 推到底会在本地删一条后误判;`IntersectionObserver` 哨兵只在进出时回调,需要 `watch + nextTick` 补查,失败会补查成死循环,曾为此引入四态 `loadState`——`@scroll` 只在用户滚动时触发,失败再滚即重试 |
+| 列表请求编排 | 单入口 `requestList({ invalidate, clearOnError, before, apply })` + `generation` 版本号(只在整表重拉递增,翻页靠 `loading` 串行);选中以 `selectedId` 持有、下标派生 | loading / 错误 / 过期判断只写一处;翻页不互相作废;id 持有的选中在置顶 / 删除后不需要修正下标 |
+| 列表失败策略 | reset 首页失败清空旧列表 / 选中 / 展开并保留错误,空态显示「加载失败」;分页及唤起 sync 失败保留数据,不新增自动重试 | 换筛选后的旧数据已不适用,清空比维护失败恢复状态更简单;已加载的分页不应因续拉失败而丢失 |
+| 列表分页 | keyset 游标 `{ copiedAt, id }` 从末条现取;`exhausted` 由响应长度写(reset 失败按空页处理),本地增删不修改;列表 `@scroll` 距底 200px 触发 `loadMore()` | OFFSET 在列表实时插入新行时会重复;从 `items.length` 推到底会在本地删一条后误判;`IntersectionObserver` 哨兵只在进出时回调,需要 `watch + nextTick` 补查,失败会补查成死循环,曾为此引入四态 `loadState`——`@scroll` 只在用户滚动时触发,失败再滚即重试 |
 | 窗口隐藏 | 走后端命令 `hideLauncher()`(`api/launcher.ts`),不直调 `getCurrentWindow().hide()`;capabilities 不给 `allow-hide` | 隐藏在 Rust 侧是一串时序(`set_ignore_cursor_events(true)` → hide → emit close),前端直调会绕过它留下透明挡点区;显示 / 隐藏的另几个入口(快捷键 / 托盘 / 失焦)本来就在 Rust |
 | 唤出键键帽 | 挂载时 `getToggleShortcut()` 读后端当前生效值,`parseShortcut()` 拆成键帽;不在组件 / 模板写死 | 快捷键预留可配置,真相在后端;前端写死会在后端改键后演错提示 |
 | 搜索框焦点环 | `SearchInput.vue` 写 `outline-hidden` 且不配 ring,是 `styling-guidelines.md` §4 / §9 的唯一显式例外 | 它是启动器内唯一且常驻的焦点目标,每次唤出都程序聚焦,环会常亮成突兀边框且不传递信息;其它输入框仍须配 ring |

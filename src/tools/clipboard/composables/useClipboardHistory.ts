@@ -15,7 +15,7 @@ import {
 import { EVENTS } from "@/lib/events";
 import type { ClipboardItem, ClipboardKind, ListCursor } from "@/types/clipboard";
 
-/** 每页条数;exhausted 的唯一判据是「响应是否不满一页」 */
+/** 每页条数;响应不满一页时标记到底,首页重置失败按空页处理 */
 export const PAGE_SIZE = 100;
 /** 整表重拉的防抖:连续输入搜索词、粘贴写回 + 回捕连发事件,都只拉最后一次 */
 const REFRESH_DEBOUNCE_MS = 150;
@@ -38,7 +38,7 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
   const expandedId = ref<number | null>(null);
   /** 是否有一次 list 请求在途(首屏 / 重拉 / 翻页);翻页靠它串行 */
   const loading = ref(false);
-  /** 上一页是否不满一页(已到底);只在响应到达时写,本地增删不推它 */
+  /** 上一页是否不满一页(已到底);首页重置失败按空页标记到底,本地增删不推它 */
   const exhausted = ref(false);
   /** 最近一次请求 / 命令失败的文案(Rust 已是完整中文句子);下一次成功清空 */
   const error = ref("");
@@ -62,6 +62,8 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
   async function requestList(options: {
     /** true = 整表重拉,版本号 +1,在途的旧请求回来后作废 */
     invalidate?: boolean;
+    /** 首页重置失败时清掉不再适用的旧列表;sync / 翻页缺省保留 */
+    clearOnError?: boolean;
     /** 翻页游标;缺省拉首页 */
     before?: ListCursor;
     /** 把本次结果合入列表 */
@@ -83,6 +85,7 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
     } catch (e) {
       if (gen !== generation) return;
       console.error("拉取剪贴板历史失败:", e);
+      if (options.clearOnError) applyReset([]);
       error.value = String(e);
     } finally {
       if (gen === generation) loading.value = false;
@@ -99,13 +102,14 @@ export function useClipboardHistory(query: MaybeRefOrGetter<string>) {
   }
 
   /**
-   * 拉首页。reset = 无条件重置(挂载 / 筛选变化 / 搜索词变化);
-   * sync = 只比首条 id:对不上说明隐藏期间漏了事件才重置,对得上滚动、选中、已加载分页全留着。
+   * 拉首页。reset = 无条件重置(挂载 / 筛选变化 / 搜索词变化 / 显式刷新),失败按空页重置;
+   * sync = 只比首条 id:对不上说明隐藏期间漏了事件才重置,对得上或失败时滚动、选中、已加载分页全留着。
    */
   function refreshList(mode: "reset" | "sync"): Promise<void> {
     clearTimeout(refreshTimer);
     return requestList({
       invalidate: true,
+      clearOnError: mode === "reset",
       apply: (page) => {
         if (mode === "reset" || page[0]?.id !== items.value[0]?.id) applyReset(page);
       },

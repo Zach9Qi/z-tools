@@ -107,7 +107,8 @@ useKeymap([
         <div class="flex size-12 items-center justify-center rounded-2xl border bg-muted">
           <IconClipboard class="size-6 text-muted-foreground" aria-hidden="true" />
         </div>
-        <p class="text-sm text-muted-foreground">
+        <p v-if="error" class="text-sm text-destructive">加载失败</p>
+        <p v-else class="text-sm text-muted-foreground">
           {{ query || favoriteOnly || kind !== null ? "没有匹配的记录" : "暂无剪贴板记录" }}
         </p>
       </div>

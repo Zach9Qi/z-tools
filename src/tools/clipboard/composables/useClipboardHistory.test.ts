@@ -154,6 +154,21 @@ describe("useClipboardHistory 首屏与分页", () => {
     expect(history.resetTick.value).toBe(2);
   });
 
+  it("挂载首页失败保留错误文案,空列表不翻页也不自动重试", async () => {
+    const history = mountHistory();
+    await settle(0, new Error("首屏失败"));
+    expect(history.items.value).toEqual([]);
+    expect(history.selected.value).toBeUndefined();
+    expect(history.expandedId.value).toBe(null);
+    expect(history.exhausted.value).toBe(true);
+    expect(history.loading.value).toBe(false);
+    expect(history.error.value).toContain("首屏失败");
+
+    await history.loadMore();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(listClipboardItems).toHaveBeenCalledTimes(1);
+  });
+
   it("翻页用末条作游标、按 id 去重;在途 / 到底 / 空列表不发请求", async () => {
     const history = mountHistory();
     await history.loadMore();
@@ -196,6 +211,7 @@ describe("useClipboardHistory 首屏与分页", () => {
     expect(history.items.value).toHaveLength(PAGE_SIZE);
     expect(history.error.value).toContain("分页失败");
     expect(history.loading.value).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
     expect(listClipboardItems).toHaveBeenCalledTimes(2);
 
     void history.loadMore();
@@ -233,9 +249,28 @@ describe("useClipboardHistory 过期丢弃", () => {
     void history.toggleFavoriteOnly();
     await settle(2, new Error("最新失败"));
     await settle(1, outcome === "成功" ? page(3000) : new Error("过期失败"));
-    expect(history.items.value).toEqual(page());
+    expect(history.items.value).toEqual([]);
     expect(history.error.value).toContain("最新失败");
     expect(history.loading.value).toBe(false);
+    expect(history.resetTick.value).toBe(2);
+  });
+
+  it("过期首页失败不能清掉最新成功结果、选中或展开", async () => {
+    const history = await mountLoaded();
+    void history.refresh();
+    void history.setKind("text");
+    await settle(2, page(2000));
+    history.moveSelection(1);
+    history.toggleExpanded(1998);
+
+    await settle(1, new Error("过期失败"));
+    expect(history.items.value).toEqual(page(2000));
+    expect(history.selected.value?.id).toBe(1999);
+    expect(history.expandedId.value).toBe(1998);
+    expect(history.error.value).toBe("");
+    expect(history.loading.value).toBe(false);
+    expect(history.exhausted.value).toBe(false);
+    expect(history.resetTick.value).toBe(2);
   });
 
   it("卸载后:在途响应不落地,待发防抖不再请求", async () => {
@@ -253,6 +288,54 @@ describe("useClipboardHistory 过期丢弃", () => {
 });
 
 describe("useClipboardHistory 筛选", () => {
+  it.each(["分类", "收藏", "搜索", "显式刷新"])(
+    "%s首页失败清空列表、选中与展开,不再翻页或自动重试;后续切筛选成功恢复",
+    async (source) => {
+      const query = ref("");
+      const history = await mountLoaded(page(), query);
+      history.moveSelection(1);
+      history.toggleExpanded(998);
+
+      if (source === "分类") void history.setKind("image");
+      else if (source === "收藏") void history.toggleFavoriteOnly();
+      else if (source === "显式刷新") void history.refresh();
+      else {
+        query.value = "关键词";
+        await nextTick();
+        await vi.advanceTimersByTimeAsync(150);
+      }
+      expect(listClipboardItems).toHaveBeenCalledTimes(2);
+      expect(listClipboardItems).toHaveBeenLastCalledWith(
+        expect.objectContaining({ before: undefined }),
+      );
+      await settle(1, new Error("首页失败"));
+      expect(history.items.value).toEqual([]);
+      expect(history.selected.value).toBeUndefined();
+      expect(history.selectedIndex.value).toBe(-1);
+      expect(history.expandedId.value).toBe(null);
+      expect(history.exhausted.value).toBe(true);
+      expect(history.resetTick.value).toBe(2);
+      expect(history.error.value).toContain("首页失败");
+      expect(history.loading.value).toBe(false);
+
+      await history.loadMore();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(listClipboardItems).toHaveBeenCalledTimes(2);
+      expect(history.error.value).toContain("首页失败");
+
+      void history.setKind("text");
+      expect(listClipboardItems).toHaveBeenCalledTimes(3);
+      const recovered = page(2000).map((item) => ({ ...item, favorite: true }));
+      await settle(2, recovered);
+      expect(history.items.value).toEqual(recovered);
+      expect(history.selected.value?.id).toBe(2000);
+      expect(history.expandedId.value).toBe(null);
+      expect(history.exhausted.value).toBe(false);
+      expect(history.resetTick.value).toBe(3);
+      expect(history.error.value).toBe("");
+    },
+  );
+
   it("搜索词连续变化只在防抖后发一次;切分类立刻重拉并取消待发防抖;相同分类不重复拉", async () => {
     const query = ref("");
     const history = await mountLoaded(page(), query);
@@ -437,6 +520,24 @@ describe("useClipboardHistory 后端事件", () => {
     expect(ids(history)).toEqual([2000]);
     expect(history.selected.value?.id).toBe(2000);
     expect(history.selectedIndex.value).toBe(0);
+  });
+
+  it("唤起 sync 失败保留列表、选中与展开,不自动重试", async () => {
+    const history = await mountLoaded();
+    history.moveSelection(1);
+    history.toggleExpanded(998);
+    emit(EVENTS.LAUNCHER_OPENED);
+    await settle(1, new Error("同步失败"));
+
+    expect(history.items.value).toEqual(page());
+    expect(history.selected.value?.id).toBe(999);
+    expect(history.expandedId.value).toBe(998);
+    expect(history.resetTick.value).toBe(1);
+    expect(history.exhausted.value).toBe(false);
+    expect(history.loading.value).toBe(false);
+    expect(history.error.value).toContain("同步失败");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(listClipboardItems).toHaveBeenCalledTimes(2);
   });
 
   it("唤起 sync:首条相同不重置,首条不同才整表重置", async () => {
