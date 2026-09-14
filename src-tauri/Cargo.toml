@@ -35,7 +35,7 @@ tauri-plugin-log = "2.9.1"
 tauri-plugin-global-shortcut = "2"
 # 剪贴板读写（跨平台，clipboard/backend.rs）：文本 / 图片 / 文件列表三平台一致 API，1Password 维护、生态主流；
 # Windows 侧只依赖 windows-sys，不会引入第二份 windows crate。不选 clipboard-rs（小众且依赖 windows 0.59 与本仓库冲突）、
-# 不选官方 clipboard-manager 插件（无文件列表、无监听）。监听与粘贴模拟 arboard 不提供，按平台自写（clipboard/windows.rs、clipboard/linux.rs）
+# 不选官方 clipboard-manager 插件（无文件列表、无监听）。监听与粘贴模拟 arboard 不提供，按平台自写（clipboard/windows.rs、clipboard/linux.rs、clipboard/macos.rs）
 arboard = "3.6"
 # 剪贴板历史持久化：SQLite（bundled libsqlite3-sys）。只用运行时 sqlx::query*，不用 query! 宏，避免编译期依赖 DATABASE_URL；
 # runtime-tokio 对齐 tauri 内置的 tokio 运行时；migrate 让迁移脚本编译期内嵌（sqlx::migrate!，该宏由 sqlx-macros 提供，
@@ -79,3 +79,12 @@ arboard = { version = "3.6", features = ["wayland-data-control"] }
 # 纯 Rust X11 协议客户端，不依赖 libX11 / libXtst 等 C 头文件，便于交叉编译；
 # allow-unsafe-code：xfixes / xtest 扩展内部需要；xfixes：剪贴板 Selection 变化通知；xtest：模拟 Ctrl+V
 x11rb = { version = "0.14.0", default-features = false, features = ["allow-unsafe-code", "xfixes", "xtest"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# 访问 macOS AppKit（NSWorkspace / NSRunningApplication / NSPasteboard）与 Foundation；
+# 版本对齐 Tauri v2 间接依赖的 objc2 系，避免编译两份绑定
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication", "NSPasteboard"] }
+objc2-foundation = "0.3"
+# 模拟按键：CGEventCreateKeyboardEvent / CGEventPost（Cmd+V）
+core-graphics = "0.25"

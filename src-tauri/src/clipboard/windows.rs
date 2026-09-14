@@ -1,7 +1,7 @@
 //! 剪贴板的 Windows 平台层：消息窗口监听 `WM_CLIPBOARDUPDATE`、停止监听、`SendInput` 模拟 Ctrl+V。
 //!
 //! 只由父模块 `clipboard.rs` 以 `#[cfg(windows)]` 引入。读写剪贴板本身在跨平台的 `backend.rs`，
-//! 这里只负责 arboard 不提供的两件事：变化通知与按键模拟。Linux 见同目录 `linux.rs`；后续 macOS 再补一份同签名文件。
+//! 这里只负责 arboard 不提供的两件事：变化通知与按键模拟。
 
 use std::sync::atomic::{AtomicIsize, Ordering};
 

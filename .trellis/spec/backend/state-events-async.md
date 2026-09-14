@@ -4,9 +4,9 @@
 >
 > | 类别 | 现例 | 位置 |
 > |---|---|---|
-> | 托管状态 | `ClipboardStore { pool: SqlitePool, images_dir: PathBuf }`;`#[cfg(any(windows, target_os = "linux"))] ClipboardWatcher { ... }`;`#[cfg(any(windows, target_os = "linux"))] PreviousForeground(AtomicIsize)` | `clipboard.rs` / `clipboard/{windows,linux}.rs` / `launcher.rs`,均在 `lib.rs::setup_desktop` 里 `app.manage` |
+> | 托管状态 | `ClipboardStore { pool: SqlitePool, images_dir: PathBuf }`;`#[cfg(any(windows, target_os = "linux", target_os = "macos"))] ClipboardWatcher { ... }`;`#[cfg(any(windows, target_os = "linux", target_os = "macos"))] PreviousForeground(AtomicIsize)` | `clipboard.rs` / `clipboard/{windows,linux,macos}.rs` / `launcher.rs`,均在 `lib.rs::setup_desktop` 里 `app.manage` |
 > | 事件 | `launcher://open` / `launcher://close`(`launcher.rs`,无 payload,emit `()`);`clipboard://changed`(`clipboard.rs::CLIPBOARD_CHANGED`,payload 为落库后的 `ClipboardItem`) | 前端 `src/lib/events.ts` 镜像 |
-> | 后台任务 | `spawn_blocking(run_monitor)` 消息循环,`RunEvent::Exit` 时 `stop_monitor(handle/xid)` | `lib.rs` / `clipboard/{windows,linux}.rs` |
+> | 后台任务 | `spawn_blocking(run_monitor)` 消息循环 / 轮询,`RunEvent::Exit` 时 `stop_monitor(handle/xid/sentinel)` | `lib.rs` / `clipboard/{windows,linux,macos}.rs` |
 > | async 命令 | `commands/clipboard.rs` 6 个(`State<'_, ClipboardStore>` + sqlx) | 见 `command-guidelines.md` |
 >
 > 以下是引入新状态 / 事件 / 后台任务时的约定,现例作为样板。
@@ -21,8 +21,8 @@
 - setup 里的初始化顺序有依赖时,用注释写明「A 必须在 B 之前」(`setup_desktop` 的 1~6 步编号注释;顺序理由见 `config-and-permissions.md` §8)。
 - 状态要被后台任务持有时,让它 `Clone` 且只克隆 Arc 级句柄(`ClipboardStore` 派生 `Clone`:`SqlitePool` 本身是 Arc;`on_clipboard_update` 里 `store.inner().clone()` 后 move 进 `spawn`)。
 - 在可能尚未托管的路径(监听线程、`RunEvent::Exit`)用 `app.try_state::<T>()` 而不是 `state()`:后者在未托管时 panic。
-- 平台专属状态整个类型带 `#[cfg(any(windows, target_os = "linux"))]`（或对应平台 cfg，如 `ClipboardWatcher` / `PreviousForeground`），`manage` 处同样 cfg；不为其他平台造空状态。
-- 原生句柄(`HWND`)存进状态时转成 `isize` 放 `AtomicIsize`:`HWND` 是裸指针不 `Send`,而托管状态必须 `Send + Sync`;0 表示「未记录 / 已退出」。
+- 平台专属状态整个类型带 `#[cfg(any(windows, target_os = "linux", target_os = "macos"))]`（或对应平台 cfg，如 `ClipboardWatcher` / `PreviousForeground`），`manage` 处同样 cfg；不为其他平台造空状态。
+- 平台前台标识存进状态时转成 `isize` 放 `AtomicIsize`（Windows `HWND`、Linux X11 XID、macOS 应用 PID）:裸指针句柄不 `Send`,而托管状态必须 `Send + Sync`;0 表示「未记录 / 已退出」。
 
 ### 锁选型
 

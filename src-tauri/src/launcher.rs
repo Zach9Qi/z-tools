@@ -11,6 +11,8 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Runtime, WebviewWindo
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(windows)]
 mod windows;
 
@@ -82,14 +84,14 @@ pub fn anchor_position(work: WorkArea, window: (u32, u32)) -> (i32, i32) {
     (x.round() as i32, y.round() as i32)
 }
 
-/// 唤出启动器前的前台窗口句柄（`isize`，0 = 未记录）。Windows 为 `HWND`，Linux 为 X11 XID；
-/// `app.manage` 托管；`show()` 在抢焦点之前写入，剪贴板粘贴据此把焦点还给原窗口再模拟 Ctrl+V。
-#[cfg(any(windows, target_os = "linux"))]
+/// 唤出启动器前的前台标识（`isize`，0 = 未记录）。Windows 为 `HWND`，Linux 为 X11 XID，macOS 为应用 PID；
+/// `app.manage` 托管；`show()` 在抢焦点之前写入，剪贴板粘贴据此把焦点还给原窗口 / 应用再模拟粘贴按键。
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 #[derive(Debug, Default)]
 pub struct PreviousForeground(std::sync::atomic::AtomicIsize);
 
-/// 最近一次唤出前记录的前台窗口；从未记录 / 状态未托管时为 `None`。
-#[cfg(any(windows, target_os = "linux"))]
+/// 最近一次唤出前记录的前台窗口 / 应用；从未记录 / 状态未托管时为 `None`。
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 pub fn previous_foreground<R: Runtime>(app: &AppHandle<R>) -> Option<isize> {
     let hwnd = app
         .try_state::<PreviousForeground>()?
@@ -98,8 +100,8 @@ pub fn previous_foreground<R: Runtime>(app: &AppHandle<R>) -> Option<isize> {
     (hwnd != 0).then_some(hwnd)
 }
 
-/// 把某个窗口切到前台；窗口已关闭或系统拒绝时返回 `false`。
-#[cfg(any(windows, target_os = "linux"))]
+/// 把某个窗口 / 应用切到前台；目标已关闭或系统拒绝时返回 `false`。
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 pub fn activate_window(hwnd: isize) -> bool {
     #[cfg(windows)]
     {
@@ -108,6 +110,10 @@ pub fn activate_window(hwnd: isize) -> bool {
     #[cfg(target_os = "linux")]
     {
         linux::activate(hwnd)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos::activate(hwnd)
     }
 }
 
@@ -139,7 +145,7 @@ pub fn show<R: Runtime>(app: &AppHandle<R>) {
         return;
     };
     // 必须在 show / set_focus 之前记录，之后前台就是我们自己了
-    #[cfg(any(windows, target_os = "linux"))]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     remember_foreground(app, &window);
     // 隐藏期间设置了忽略鼠标事件，显示前必须恢复，否则面板点不动
     if let Err(e) = window.set_ignore_cursor_events(false) {
@@ -244,9 +250,9 @@ pub fn quit<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// 安装平台钩子：Windows 拦截 Alt 弹出的无边框窗口系统菜单；Linux 为空实现（GTK 无此机制）。
-/// 调用方需以 `#[cfg(any(windows, target_os = "linux"))]` 守卫。
-#[cfg(any(windows, target_os = "linux"))]
+/// 安装平台钩子：Windows 拦截 Alt 弹出的无边框窗口系统菜单；Linux / macOS 为空实现。
+/// 调用方需以 `#[cfg(any(windows, target_os = "linux", target_os = "macos"))]` 守卫。
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 pub fn install_platform_hooks<R: Runtime>(window: &WebviewWindow<R>) {
     #[cfg(windows)]
     match window.hwnd() {
@@ -258,11 +264,16 @@ pub fn install_platform_hooks<R: Runtime>(window: &WebviewWindow<R>) {
         let _ = window;
         linux::suppress_alt_sysmenu(0);
     }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window;
+        macos::suppress_alt_sysmenu(0);
+    }
 }
 
-/// 记录当前前台窗口到 `PreviousForeground`；前台是启动器自己（可见但失焦后再次唤出）时
-/// 保留上一次的记录，否则粘贴会把 Ctrl+V 发给错误目标。
-#[cfg(any(windows, target_os = "linux"))]
+/// 记录当前前台窗口 / 应用到 `PreviousForeground`；前台是启动器自己（可见但失焦后再次唤出）时
+/// 保留上一次的记录，否则粘贴会把按键发给错误目标。
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 fn remember_foreground<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
     let Some(state) = app.try_state::<PreviousForeground>() else {
         return;
@@ -286,6 +297,18 @@ fn remember_foreground<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>
         let foreground = linux::current_foreground();
         // 无前台或前台已是本进程窗口（再次唤出）时保留上一次记录
         if foreground == 0 || linux::is_own_process(foreground) {
+            return;
+        }
+        state
+            .0
+            .store(foreground, std::sync::atomic::Ordering::SeqCst);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window;
+        let foreground = macos::current_foreground();
+        // 无前台或前台已是本进程（再次唤出）时保留上一次记录
+        if foreground == 0 || macos::is_own_process(foreground) {
             return;
         }
         state
@@ -367,6 +390,10 @@ fn cursor_on_tray<R: Runtime>(app: &AppHandle<R>) -> bool {
     }
     #[cfg(target_os = "linux")]
     if linux::is_cursor_on_notification_chevron(cursor.x, cursor.y) {
+        return false;
+    }
+    #[cfg(target_os = "macos")]
+    if macos::is_cursor_on_notification_chevron(cursor.x, cursor.y) {
         return false;
     }
 

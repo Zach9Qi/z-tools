@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "平台模块组织规范：通用基础设施与平台专属文件（windows.rs, linux.rs, macos.rs）的拆分规则与同名函数契约"}
+{"file": ".trellis/spec/backend/state-events-async.md", "reason": "后台监听任务、托管状态（ClipboardWatcher, PreviousForeground）与生命周期退出（RunEvent::Exit）标准规范"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "unsafe 标注规范、中文模块与函数文档规范、错误处理与测试准则"}
+{"file": ".trellis/spec/guides/project-conventions.md", "reason": "多平台 CI 门禁、提交规范与命名约定"}
