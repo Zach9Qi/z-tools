@@ -231,6 +231,17 @@ pub fn file_name_of(path: &str) -> String {
         .unwrap_or_else(|| path.to_owned())
 }
 
+/// 测试夹具：按本机分隔符拼接路径。
+/// 写死 `C:\` 会在 Linux CI 上被当成单个文件名（`\` 不是分隔符，且是合法文件名字符）。
+#[cfg(test)]
+pub(crate) fn native_path(parts: &[&str]) -> String {
+    parts
+        .iter()
+        .collect::<std::path::PathBuf>()
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// 监听器录入：图片先落盘 → upsert（重复内容上浮）→ 淘汰超额条目并删其图片 → 带着落库后的条目广播 `clipboard://changed`。
 ///
 /// 失败只记日志：监听器没有调用方可以处理错误，漏记一条不影响后续采集。
@@ -347,8 +358,8 @@ mod tests {
     #[test]
     fn searchable_text_of_files_joins_file_names_only() {
         let captured = Captured::Files(vec![
-            r"C:\Users\me\Documents\report.pdf".into(),
-            "/home/me/photos/cat.png".into(),
+            native_path(&["Documents", "report.pdf"]),
+            native_path(&["photos", "cat.png"]),
         ]);
         assert_eq!(
             searchable_text(&captured).as_deref(),
@@ -389,7 +400,7 @@ mod tests {
 
     #[test]
     fn file_name_falls_back_to_path_when_missing() {
-        assert_eq!(file_name_of(r"C:\dir\a.txt"), "a.txt");
+        assert_eq!(file_name_of(&native_path(&["dir", "a.txt"])), "a.txt");
         assert_eq!(file_name_of("/"), "/");
         assert_eq!(file_name_of(""), "");
     }

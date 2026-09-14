@@ -466,7 +466,7 @@ mod tests {
     use tokio::sync::oneshot;
 
     use super::*;
-    use crate::clipboard::{ListCursor, domain_hash};
+    use crate::clipboard::{ListCursor, domain_hash, native_path};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub(super) enum Stage {
@@ -1164,11 +1164,10 @@ mod tests {
     #[tokio::test]
     async fn file_search_matches_file_name_but_not_directory() {
         let store = memory_store().await;
+        let report = native_path(&["Projects", "report.pdf"]);
+        let cat = native_path(&["home", "me", "photos", "cat.png"]);
         store
-            .upsert(
-                &files(&[r"C:\Projects\report.pdf", "/home/me/photos/cat.png"]),
-                1,
-            )
+            .upsert(&files(&[&report, &cat]), 1)
             .await
             .expect("upsert");
         let hit = store
@@ -1183,7 +1182,7 @@ mod tests {
             ClipboardItem::Files { files, .. } => {
                 assert_eq!(files.len(), 2);
                 assert_eq!(files[0].name, "report.pdf");
-                assert_eq!(files[0].path, r"C:\Projects\report.pdf");
+                assert_eq!(files[0].path, report);
                 assert_eq!(files[1].name, "cat.png");
                 assert!(!files[0].exists && !files[1].exists);
             }

@@ -24,6 +24,7 @@ cargo test
 - 不测:需要 `AppHandle` / `State` / 窗口的命令;把逻辑下沉后测领域层。
 - 异步逻辑用 `#[tokio::test]`(`[dev-dependencies] tokio = { features = ["macros", "rt"] }` 已加并注释);数据库逻辑用 `sqlite::memory:` 内存库,连接数固定 1 且不回收(见 `persistence.md` §6)。
 - 涉及文件系统的测试用 `std::env::temp_dir()` + 唯一子目录(现例 `store.rs::get_captured_round_trips_text_files_and_image` 用 `z-tools-clipboard-store-<pid>`),测试结束清理;不写到仓库目录。
+- 路径夹具用本机分隔符拼接(`clipboard::native_path`),不要写死 `C:\...`。Linux 上 `\` 不是分隔符且是合法文件名,`Path::file_name()` 会把整串当成文件名,Ubuntu CI 会红、改实现去切 `\` 会误伤真实 Linux 文件名。
 - 不测需要真实系统剪贴板 / 消息循环的代码(`backend::read_snapshot` / `write`、`clipboard/windows.rs`);把阈值判定、哈希、缩略图尺寸等抽成纯函数测(`backend.rs` 的 `text_snapshot` / `image_too_large` / `thumb_size` / `pixel_hash` / `image_snapshot`)。
 
 ## 3. 注释与文档
